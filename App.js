@@ -3,8 +3,10 @@ import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-nati
 
 import { initDatabase } from './src/backend/database';
 import { getActiveSession, signOut } from './src/backend/authService';
+import AddPaymentScreen from './src/screens/AddPaymentScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import PaymentMethodsScreen from './src/screens/PaymentMethodsScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import { colors } from './src/theme';
 
@@ -12,6 +14,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
   const [authView, setAuthView] = useState('login');
+  const [appView, setAppView] = useState('home');
 
   useEffect(() => {
     let mounted = true;
@@ -44,11 +47,13 @@ export default function App() {
     await signOut(user?.sessionToken);
     setUser(null);
     setAuthView('login');
+    setAppView('home');
   }
 
-  function handleAuthenticated(sessionUser) {
+  function handleAuthenticated(sessionUser, nextView = 'home') {
     setUser(sessionUser);
     setAuthView('login');
+    setAppView(nextView);
   }
 
   if (booting) {
@@ -64,10 +69,33 @@ export default function App() {
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor={colors.surfaceLowest} />
-      {user ? (
-        <HomeScreen user={user} onSignOut={handleSignOut} />
+      {user && appView === 'payments' ? (
+        <PaymentMethodsScreen
+          onAdd={() => setAppView('addPayment')}
+          onBack={() => setAppView('home')}
+          onContinue={() => setAppView('home')}
+          user={user}
+        />
+      ) : user && appView === 'addPayment' ? (
+        <AddPaymentScreen
+          onBack={() => setAppView('payments')}
+          onSaved={(updatedUser) => {
+            setUser(updatedUser);
+            setAppView('payments');
+          }}
+          user={user}
+        />
+      ) : user ? (
+        <HomeScreen
+          onOpenPayments={() => setAppView('payments')}
+          user={user}
+          onSignOut={handleSignOut}
+        />
       ) : authView === 'register' ? (
-        <RegisterScreen onBack={() => setAuthView('login')} onRegistered={handleAuthenticated} />
+        <RegisterScreen
+          onBack={() => setAuthView('login')}
+          onRegistered={(sessionUser) => handleAuthenticated(sessionUser, 'payments')}
+        />
       ) : (
         <LoginScreen onLogin={handleAuthenticated} onRegister={() => setAuthView('register')} />
       )}

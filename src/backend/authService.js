@@ -20,7 +20,12 @@ export async function login(email, password) {
       u.estado,
       u.cliente_id AS clienteId,
       c.categoria,
-      c.admitido
+      c.admitido,
+      (
+        SELECT COUNT(*)
+        FROM medios_pago mp
+        WHERE mp.cliente = u.cliente_id
+      ) AS paymentCount
      FROM usuarios u
      JOIN clientes c ON c.identificador = u.cliente_id
      WHERE lower(u.email) = ?`,
@@ -94,19 +99,6 @@ export async function registerUser(form) {
     [personId, normalizedEmail, form.password, form.firstName.trim(), 'cliente', 'activo']
   );
 
-  await db.runAsync(
-    `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      personId,
-      form.paymentType,
-      form.paymentDetail.trim(),
-      form.paymentCurrency,
-      Number(form.paymentAmount || 0),
-      'si'
-    ]
-  );
-
   return login(normalizedEmail, form.password);
 }
 
@@ -122,7 +114,12 @@ export async function getActiveSession() {
       u.estado,
       u.cliente_id AS clienteId,
       c.categoria,
-      c.admitido
+      c.admitido,
+      (
+        SELECT COUNT(*)
+        FROM medios_pago mp
+        WHERE mp.cliente = u.cliente_id
+      ) AS paymentCount
      FROM sesiones s
      JOIN usuarios u ON u.id = s.usuario_id
      JOIN clientes c ON c.identificador = u.cliente_id
@@ -156,7 +153,8 @@ function toSessionUser(user, token) {
     email: user.email,
     nombre: user.nombre,
     rol: user.rol,
-    categoria: user.categoria
+    categoria: user.categoria,
+    paymentCount: user.paymentCount ?? 0
   };
 }
 
@@ -175,8 +173,7 @@ function validateRegistration(form) {
     ['countryNumber', 'Selecciona tu pais de origen.'],
     ['email', 'Ingresa tu correo.'],
     ['password', 'Crea una clave.'],
-    ['confirmPassword', 'Confirma tu clave.'],
-    ['paymentDetail', 'Ingresa el detalle del medio de pago.']
+    ['confirmPassword', 'Confirma tu clave.']
   ];
 
   for (const [key, message] of required) {
@@ -197,7 +194,4 @@ function validateRegistration(form) {
     throw new Error('La clave debe tener 8 caracteres, un numero y un simbolo.');
   }
 
-  if (Number(form.paymentAmount || 0) <= 0) {
-    throw new Error('El monto de garantia debe ser mayor a cero.');
-  }
 }

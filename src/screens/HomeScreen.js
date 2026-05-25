@@ -23,7 +23,7 @@ const categoryLabel = {
   platino: 'Platino'
 };
 
-export default function HomeScreen({ user, onSignOut }) {
+export default function HomeScreen({ user, onOpenPayments, onSignOut }) {
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
   const [summary, setSummary] = useState({ verifiedPayments: 0, totalBids: 0 });
@@ -128,7 +128,7 @@ export default function HomeScreen({ user, onSignOut }) {
       <View style={styles.bottomNav}>
         <NavItem active icon="home-variant" label="Inicio" />
         <NavItem icon="heart-outline" label="Favoritos" />
-        <NavItem icon="credit-card-outline" label="Pagos" />
+        <NavItem icon="credit-card-outline" label="Pagos" onPress={onOpenPayments} />
         <NavItem icon="account-outline" label="Perfil" />
       </View>
     </View>
@@ -199,9 +199,9 @@ function AuctionListItem({ auction }) {
   );
 }
 
-function NavItem({ active, icon, label }) {
+function NavItem({ active, icon, label, onPress }) {
   return (
-    <Pressable style={styles.navItem}>
+    <Pressable onPress={onPress} style={styles.navItem}>
       <MaterialCommunityIcons
         color={active ? colors.primary : colors.onSurfaceVariant}
         name={icon}

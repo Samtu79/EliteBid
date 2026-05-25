@@ -1,0 +1,567 @@
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+
+import { addPaymentMethod } from '../backend/paymentService';
+import { colors, radii, shadows } from '../theme';
+
+const initialForm = {
+  type: 'tarjeta',
+  cardNumber: '',
+  cardHolder: '',
+  expiry: '',
+  cvv: '',
+  bank: '',
+  accountType: '',
+  cbu: '',
+  alias: '',
+  checkNumber: '',
+  issueDate: '',
+  checkImageUri: '',
+  amount: '',
+  currency: 'ARS'
+};
+
+const tabs = [
+  { label: 'Cuenta', value: 'cuenta' },
+  { label: 'Tarjeta', value: 'tarjeta' },
+  { label: 'Cheque', value: 'cheque' }
+];
+
+export default function AddPaymentScreen({ onBack, onSaved, user }) {
+  const [form, setForm] = useState(initialForm);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function updateField(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function changeTab(type) {
+    setError('');
+    setForm((current) => ({ ...current, type }));
+  }
+
+  async function pickCheckImage() {
+    setError('');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setError('Necesitamos permiso para seleccionar la foto del cheque.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      mediaTypes: ['images'],
+      quality: 0.75
+    });
+
+    if (!result.canceled) {
+      updateField('checkImageUri', result.assets[0].uri);
+    }
+  }
+
+  async function save() {
+    setError('');
+    setLoading(true);
+
+    try {
+      const paymentCount = await addPaymentMethod(user.clienteId, form);
+      onSaved({ ...user, paymentCount });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.container}
+    >
+      <LinearGradient
+        colors={[colors.surfaceLowest, colors.surface, colors.surfaceLow]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.topBar}>
+        <Pressable onPress={onBack} style={styles.iconButton}>
+          <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
+        </Pressable>
+        <Text style={styles.logo}>Elite Bid</Text>
+        <View style={styles.iconButtonGhost} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Metodo de Pago</Text>
+        <Text style={styles.subtitle}>Configura tus opciones para participar en subastas.</Text>
+
+        <View style={styles.tabs}>
+          {tabs.map((tab) => (
+            <Pressable
+              key={tab.value}
+              onPress={() => changeTab(tab.value)}
+              style={[styles.tab, form.type === tab.value && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, form.type === tab.value && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {form.type === 'tarjeta' ? (
+          <CardForm form={form} updateField={updateField} />
+        ) : form.type === 'cuenta' ? (
+          <BankForm form={form} updateField={updateField} />
+        ) : (
+          <CheckForm form={form} pickCheckImage={pickCheckImage} updateField={updateField} />
+        )}
+
+        <View style={styles.commonFields}>
+          <View style={styles.row}>
+            <Field
+              keyboardType="numeric"
+              label="Monto garantia"
+              onChangeText={(value) => updateField('amount', value)}
+              placeholder="500000"
+              value={form.amount}
+            />
+            <View style={styles.field}>
+              <Text style={styles.label}>Moneda</Text>
+              <View style={styles.currencyRow}>
+                <Chip
+                  active={form.currency === 'ARS'}
+                  label="ARS"
+                  onPress={() => updateField('currency', 'ARS')}
+                />
+                <Chip
+                  active={form.currency === 'USD'}
+                  label="USD"
+                  onPress={() => updateField('currency', 'USD')}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable disabled={loading} onPress={save} style={styles.primaryButton}>
+          <LinearGradient
+            colors={[colors.primary, colors.primaryContainer]}
+            end={{ x: 1, y: 1 }}
+            start={{ x: 0, y: 0 }}
+            style={styles.primaryButtonFill}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.onPrimaryFixed} />
+            ) : (
+              <>
+                <Text style={styles.primaryButtonText}>{getSaveLabel(form.type)}</Text>
+                <MaterialCommunityIcons
+                  color={colors.onPrimaryFixed}
+                  name={form.type === 'cheque' ? 'shield-check' : 'check-circle-outline'}
+                  size={21}
+                />
+              </>
+            )}
+          </LinearGradient>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function CardForm({ form, updateField }) {
+  return (
+    <>
+      <View style={styles.cardPreview}>
+        <View style={styles.cardTopRow}>
+          <MaterialCommunityIcons color={colors.primary} name="contactless-payment" size={30} />
+          <Text style={styles.previewBrand}>Elite</Text>
+        </View>
+        <Text style={styles.previewNumber}>{maskCard(form.cardNumber)}</Text>
+        <View style={styles.cardBottomRow}>
+          <View>
+            <Text style={styles.previewLabel}>Titular</Text>
+            <Text style={styles.previewValue}>{form.cardHolder || 'Nombre del Titular'}</Text>
+          </View>
+          <View>
+            <Text style={styles.previewLabel}>Vence</Text>
+            <Text style={styles.previewValue}>{form.expiry || 'MM/AA'}</Text>
+          </View>
+        </View>
+      </View>
+
+      <Field
+        keyboardType="numeric"
+        label="Numero de tarjeta"
+        onChangeText={(value) => updateField('cardNumber', value)}
+        placeholder="0000 0000 0000 0000"
+        value={form.cardNumber}
+      />
+      <Field
+        label="Nombre del titular"
+        onChangeText={(value) => updateField('cardHolder', value)}
+        placeholder="Como aparece en la tarjeta"
+        value={form.cardHolder}
+      />
+      <View style={styles.row}>
+        <Field
+          label="Vencimiento"
+          onChangeText={(value) => updateField('expiry', value)}
+          placeholder="MM/AA"
+          value={form.expiry}
+        />
+        <Field
+          keyboardType="numeric"
+          label="CVV"
+          onChangeText={(value) => updateField('cvv', value)}
+          placeholder="123"
+          secureTextEntry
+          value={form.cvv}
+        />
+      </View>
+    </>
+  );
+}
+
+function BankForm({ form, updateField }) {
+  return (
+    <View style={styles.formCard}>
+      <Field
+        label="Banco"
+        onChangeText={(value) => updateField('bank', value)}
+        placeholder="Ej. Santander"
+        value={form.bank}
+      />
+      <Field
+        label="Tipo de cuenta"
+        onChangeText={(value) => updateField('accountType', value)}
+        placeholder="Cuenta corriente / Caja de ahorro"
+        value={form.accountType}
+      />
+      <Field
+        keyboardType="numeric"
+        label="CBU / CVU"
+        onChangeText={(value) => updateField('cbu', value)}
+        placeholder="22 digitos"
+        value={form.cbu}
+      />
+      <Field
+        autoCapitalize="characters"
+        label="Alias"
+        onChangeText={(value) => updateField('alias', value)}
+        placeholder="JUAN.PEREZ.BANCO"
+        value={form.alias}
+      />
+    </View>
+  );
+}
+
+function CheckForm({ form, pickCheckImage, updateField }) {
+  return (
+    <View style={styles.formCard}>
+      <Field
+        label="Banco emisor"
+        onChangeText={(value) => updateField('bank', value)}
+        placeholder="Ej. Banco Nacional"
+        value={form.bank}
+      />
+      <Field
+        keyboardType="numeric"
+        label="Numero de cheque"
+        onChangeText={(value) => updateField('checkNumber', value)}
+        placeholder="0000 0000 0000"
+        value={form.checkNumber}
+      />
+      <Field
+        label="Fecha de emision"
+        onChangeText={(value) => updateField('issueDate', value)}
+        placeholder="DD/MM/AAAA"
+        value={form.issueDate}
+      />
+      <Pressable onPress={pickCheckImage} style={styles.uploadBox}>
+        <MaterialCommunityIcons color={colors.primary} name="camera-plus-outline" size={32} />
+        <Text style={styles.uploadTitle}>
+          {form.checkImageUri ? 'Cheque cargado' : 'Capturar o subir'}
+        </Text>
+        <Text style={styles.uploadCopy}>Foto clara del cheque certificado.</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Field({ label, style, ...props }) {
+  return (
+    <View style={[styles.field, style]}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        placeholderTextColor="rgba(201, 196, 211, 0.55)"
+        style={styles.input}
+        {...props}
+      />
+    </View>
+  );
+}
+
+function Chip({ active, label, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function getSaveLabel(type) {
+  if (type === 'cuenta') return 'Guardar cuenta';
+  if (type === 'cheque') return 'Solicitar validacion';
+  return 'Guardar tarjeta';
+}
+
+function maskCard(value) {
+  const digits = String(value).replace(/\D/g, '').padEnd(16, '*').slice(0, 16);
+  return digits.replace(/(.{4})/g, '$1 ').trim();
+}
+
+const styles = StyleSheet.create({
+  cardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  cardPreview: {
+    backgroundColor: colors.surfaceHighest,
+    borderColor: 'rgba(72, 69, 81, 0.28)',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 24,
+    marginBottom: 22,
+    padding: 22,
+    ...shadows.ambient
+  },
+  cardTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  chip: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceHigh,
+    borderColor: 'rgba(72, 69, 81, 0.34)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flex: 1,
+    height: 52,
+    justifyContent: 'center'
+  },
+  chipActive: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryContainer
+  },
+  chipText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  chipTextActive: {
+    color: colors.onPrimaryFixed
+  },
+  commonFields: {
+    marginTop: 4
+  },
+  container: {
+    backgroundColor: colors.surfaceLowest,
+    flex: 1
+  },
+  content: {
+    flexGrow: 1,
+    padding: 24,
+    paddingBottom: 34
+  },
+  currencyRow: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  error: {
+    color: colors.error,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginBottom: 14
+  },
+  field: {
+    flex: 1,
+    marginBottom: 15
+  },
+  formCard: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(72, 69, 81, 0.25)',
+    borderRadius: 24,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 16
+  },
+  iconButton: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 44
+  },
+  iconButtonGhost: {
+    height: 44,
+    width: 44
+  },
+  input: {
+    backgroundColor: colors.surfaceHigh,
+    borderColor: 'rgba(72, 69, 81, 0.38)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    color: colors.onSurface,
+    fontSize: 15,
+    minHeight: 52,
+    paddingHorizontal: 15
+  },
+  label: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+    textTransform: 'uppercase'
+  },
+  logo: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0,
+    textTransform: 'uppercase'
+  },
+  previewBrand: {
+    color: colors.onSurface,
+    fontSize: 20,
+    fontWeight: '900'
+  },
+  previewLabel: {
+    color: colors.onSurfaceVariant,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  previewNumber: {
+    color: colors.onSurface,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  previewValue: {
+    color: colors.onSurface,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 4
+  },
+  primaryButton: {
+    borderRadius: radii.full,
+    overflow: 'hidden',
+    ...shadows.ambient
+  },
+  primaryButtonFill: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    height: 58,
+    justifyContent: 'center'
+  },
+  primaryButtonText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12
+  },
+  subtitle: {
+    color: colors.onSurfaceVariant,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 24
+  },
+  tab: {
+    alignItems: 'center',
+    borderRadius: radii.full,
+    flex: 1,
+    height: 42,
+    justifyContent: 'center'
+  },
+  tabActive: {
+    backgroundColor: colors.surfaceHighest
+  },
+  tabText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '800'
+  },
+  tabTextActive: {
+    color: colors.primary
+  },
+  tabs: {
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: radii.full,
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 24,
+    padding: 5
+  },
+  title: {
+    color: colors.primary,
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+    marginBottom: 7
+  },
+  topBar: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(26, 11, 49, 0.88)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 42
+  },
+  uploadBox: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceHigh,
+    borderColor: 'rgba(72, 69, 81, 0.42)',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 6,
+    marginBottom: 8,
+    padding: 22
+  },
+  uploadCopy: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  uploadTitle: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900'
+  }
+});

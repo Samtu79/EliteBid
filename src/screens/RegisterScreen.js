@@ -27,11 +27,7 @@ const initialForm = {
   countryNumber: '32',
   email: '',
   password: '',
-  confirmPassword: '',
-  paymentType: 'tarjeta',
-  paymentDetail: '',
-  paymentCurrency: 'ARS',
-  paymentAmount: ''
+  confirmPassword: ''
 };
 
 const countries = [
@@ -262,7 +258,7 @@ function CredentialsStep({ form, updateField }) {
       <View style={styles.verifiedBox}>
         <MaterialCommunityIcons color={colors.primaryContainer} name="check-circle" size={26} />
         <Text style={styles.verifiedText}>
-          Tu cuenta fue verificada. Crea tu clave y registra un medio de pago para pujar.
+          Tu cuenta fue verificada. Crea tu clave para continuar con tus medios de pago.
         </Text>
       </View>
 
@@ -294,48 +290,11 @@ function CredentialsStep({ form, updateField }) {
         <Text style={styles.rule}>Al menos un numero</Text>
         <Text style={styles.rule}>Al menos un simbolo</Text>
       </View>
-
-      <Text style={styles.groupTitle}>Medio de pago</Text>
-      <View style={styles.paymentTypes}>
-        {paymentTypes.map((type) => (
-          <PaymentTypeButton
-            active={form.paymentType === type.value}
-            icon={type.icon}
-            key={type.value}
-            label={type.label}
-            onPress={() => updateField('paymentType', type.value)}
-          />
-        ))}
-      </View>
-      <Field
-        label="Detalle"
-        onChangeText={(value) => updateField('paymentDetail', value)}
-        placeholder="Visa terminada en 1234, CBU o cheque certificado"
-        value={form.paymentDetail}
-      />
-      <View style={styles.row}>
-        <Field
-          keyboardType="numeric"
-          label="Monto garantia"
-          onChangeText={(value) => updateField('paymentAmount', value)}
-          placeholder="500000"
-          value={form.paymentAmount}
-        />
-        <View style={styles.field}>
-          <Text style={styles.label}>Moneda</Text>
-          <View style={styles.currencyRow}>
-            <Chip
-              active={form.paymentCurrency === 'ARS'}
-              label="ARS"
-              onPress={() => updateField('paymentCurrency', 'ARS')}
-            />
-            <Chip
-              active={form.paymentCurrency === 'USD'}
-              label="USD"
-              onPress={() => updateField('paymentCurrency', 'USD')}
-            />
-          </View>
-        </View>
+      <View style={styles.nextStepBox}>
+        <MaterialCommunityIcons color={colors.primary} name="credit-card-plus-outline" size={26} />
+        <Text style={styles.nextStepText}>
+          Al confirmar, vas a pasar a Metodos de Pago para agregar cuenta, tarjeta o cheque.
+        </Text>
       </View>
     </>
   );
@@ -498,6 +457,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     marginBottom: 8
+  },
+  nextStepBox: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(72, 69, 81, 0.26)',
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 18,
+    padding: 18
+  },
+  nextStepText: {
+    color: colors.onSurfaceVariant,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20
   },
   logo: {
     color: colors.primary,
