@@ -30,8 +30,7 @@ const initialForm = {
   checkNumber: '',
   issueDate: '',
   checkImageUri: '',
-  amount: '',
-  currency: 'ARS'
+  amount: ''
 };
 
 const tabs = [
@@ -133,29 +132,16 @@ export default function AddPaymentScreen({ onBack, onSaved, user }) {
         )}
 
         <View style={styles.commonFields}>
-          <View style={styles.row}>
-            <Field
-              keyboardType="numeric"
-              label="Monto garantia"
-              onChangeText={(value) => updateField('amount', value)}
-              placeholder="500000"
-              value={form.amount}
-            />
-            <View style={styles.field}>
-              <Text style={styles.label}>Moneda</Text>
-              <View style={styles.currencyRow}>
-                <Chip
-                  active={form.currency === 'ARS'}
-                  label="ARS"
-                  onPress={() => updateField('currency', 'ARS')}
-                />
-                <Chip
-                  active={form.currency === 'USD'}
-                  label="USD"
-                  onPress={() => updateField('currency', 'USD')}
-                />
-              </View>
-            </View>
+          <Field
+            keyboardType="numeric"
+            label="Monto garantia en pesos argentinos"
+            onChangeText={(value) => updateField('amount', value)}
+            placeholder="500000"
+            value={form.amount}
+          />
+          <View style={styles.currencyNotice}>
+            <MaterialCommunityIcons color={colors.primary} name="cash-multiple" size={19} />
+            <Text style={styles.currencyNoticeText}>Todas las operaciones se manejan en pesos argentinos.</Text>
           </View>
         </View>
 
@@ -223,8 +209,10 @@ function CardForm({ form, updateField }) {
       />
       <View style={styles.row}>
         <Field
+          keyboardType="numeric"
           label="Vencimiento"
-          onChangeText={(value) => updateField('expiry', value)}
+          maxLength={5}
+          onChangeText={(value) => updateField('expiry', formatExpiry(value))}
           placeholder="MM/AA"
           value={form.expiry}
         />
@@ -320,14 +308,6 @@ function Field({ label, style, ...props }) {
   );
 }
 
-function Chip({ active, label, onPress }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function getSaveLabel(type) {
   if (type === 'cuenta') return 'Guardar cuenta';
   if (type === 'cheque') return 'Solicitar validacion';
@@ -337,6 +317,16 @@ function getSaveLabel(type) {
 function maskCard(value) {
   const digits = String(value).replace(/\D/g, '').padEnd(16, '*').slice(0, 16);
   return digits.replace(/(.{4})/g, '$1 ').trim();
+}
+
+function formatExpiry(value) {
+  const digits = String(value).replace(/\D/g, '').slice(0, 4);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 }
 
 const styles = StyleSheet.create({
@@ -359,28 +349,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between'
   },
-  chip: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceHigh,
-    borderColor: 'rgba(72, 69, 81, 0.34)',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    flex: 1,
-    height: 52,
-    justifyContent: 'center'
-  },
-  chipActive: {
-    backgroundColor: colors.primaryContainer,
-    borderColor: colors.primaryContainer
-  },
-  chipText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 13,
-    fontWeight: '900'
-  },
-  chipTextActive: {
-    color: colors.onPrimaryFixed
-  },
   commonFields: {
     marginTop: 4
   },
@@ -393,9 +361,22 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 34
   },
-  currencyRow: {
+  currencyNotice: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(72, 69, 81, 0.28)',
+    borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: 'row',
-    gap: 8
+    gap: 9,
+    marginBottom: 16,
+    padding: 13
+  },
+  currencyNoticeText: {
+    color: colors.onSurfaceVariant,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800'
   },
   error: {
     color: colors.error,

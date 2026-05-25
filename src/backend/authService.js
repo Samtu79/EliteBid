@@ -145,6 +145,33 @@ export async function signOut(token) {
   await db.runAsync('DELETE FROM sesiones WHERE token = ?', [token]);
 }
 
+export async function resetPassword(identifier, password, confirmPassword) {
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+
+  if (!normalizedIdentifier) {
+    throw new Error('Ingresa tu correo o numero de documento.');
+  }
+
+  validatePassword(password, confirmPassword);
+
+  const db = await getDatabase();
+  const user = await db.getFirstAsync(
+    `SELECT u.id
+     FROM usuarios u
+     JOIN personas p ON p.identificador = u.cliente_id
+     WHERE lower(u.email) = ? OR p.documento = ?
+     LIMIT 1`,
+    [normalizedIdentifier, identifier.trim()]
+  );
+
+  if (!user) {
+    throw new Error('No encontramos un usuario con esos datos.');
+  }
+
+  await db.runAsync('UPDATE usuarios SET password = ? WHERE id = ?', [password, user.id]);
+  await db.runAsync('DELETE FROM sesiones WHERE usuario_id = ?', [user.id]);
+}
+
 function toSessionUser(user, token) {
   return {
     id: user.id,
@@ -186,12 +213,15 @@ function validateRegistration(form) {
     throw new Error('Ingresa un correo valido.');
   }
 
-  if (form.password !== form.confirmPassword) {
+  validatePassword(form.password, form.confirmPassword);
+}
+
+function validatePassword(password, confirmPassword) {
+  if (password !== confirmPassword) {
     throw new Error('Las claves no coinciden.');
   }
 
-  if (form.password.length < 8 || !/\d/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password)) {
+  if (password.length < 8 || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
     throw new Error('La clave debe tener 8 caracteres, un numero y un simbolo.');
   }
-
 }

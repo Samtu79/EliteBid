@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS subastas (
   tiene_deposito TEXT CHECK (tiene_deposito IN ('si', 'no')),
   seguridad_propia TEXT CHECK (seguridad_propia IN ('si', 'no')),
   categoria TEXT CHECK (categoria IN ('comun', 'especial', 'plata', 'oro', 'platino')),
-  moneda TEXT CHECK (moneda IN ('ARS', 'USD')) DEFAULT 'ARS',
+  moneda TEXT CHECK (moneda = 'ARS') DEFAULT 'ARS',
   imagen_uri TEXT,
   FOREIGN KEY (subastador) REFERENCES subastadores (identificador)
 );
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS medios_pago (
   cliente INTEGER NOT NULL,
   tipo TEXT CHECK (tipo IN ('cuenta', 'tarjeta', 'cheque')) NOT NULL,
   detalle TEXT NOT NULL,
-  moneda TEXT CHECK (moneda IN ('ARS', 'USD')) DEFAULT 'ARS',
+  moneda TEXT CHECK (moneda = 'ARS') DEFAULT 'ARS',
   monto_garantia REAL DEFAULT 0,
   verificado TEXT CHECK (verificado IN ('si', 'no')) DEFAULT 'no',
   FOREIGN KEY (cliente) REFERENCES clientes (identificador)
@@ -201,4 +201,16 @@ CREATE TABLE IF NOT EXISTS sesiones (
   creado_en TEXT DEFAULT CURRENT_TIMESTAMP,
   expira_en TEXT NOT NULL,
   FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+);
+
+CREATE TABLE IF NOT EXISTS penalidades (
+  identificador INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente INTEGER NOT NULL,
+  titulo TEXT NOT NULL,
+  descripcion TEXT NOT NULL,
+  importe REAL NOT NULL DEFAULT 0,
+  estado TEXT CHECK (estado IN ('activa', 'pagada', 'vencida')) DEFAULT 'activa',
+  vencimiento TEXT,
+  creado_en TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente) REFERENCES clientes (identificador)
 );

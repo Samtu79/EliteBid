@@ -252,6 +252,12 @@ function PersonalStep({ form, pickDocument, updateField }) {
 }
 
 function CredentialsStep({ form, updateField }) {
+  const passwordRules = [
+    { label: 'Minimo 8 caracteres', valid: form.password.length >= 8 },
+    { label: 'Al menos un numero', valid: /\d/.test(form.password) },
+    { label: 'Al menos un simbolo', valid: /[^A-Za-z0-9]/.test(form.password) }
+  ];
+
   return (
     <>
       <Text style={styles.title}>Crear clave</Text>
@@ -286,9 +292,16 @@ function CredentialsStep({ form, updateField }) {
       />
 
       <View style={styles.rules}>
-        <Text style={styles.rule}>Minimo 8 caracteres</Text>
-        <Text style={styles.rule}>Al menos un numero</Text>
-        <Text style={styles.rule}>Al menos un simbolo</Text>
+        {passwordRules.map((rule) => (
+          <View key={rule.label} style={styles.ruleRow}>
+            <MaterialCommunityIcons
+              color={rule.valid ? '#73E6A2' : colors.error}
+              name={rule.valid ? 'check-circle' : 'close-circle'}
+              size={18}
+            />
+            <Text style={[styles.rule, rule.valid && styles.ruleValid]}>{rule.label}</Text>
+          </View>
+        ))}
       </View>
       <View style={styles.nextStepBox}>
         <MaterialCommunityIcons color={colors.primary} name="credit-card-plus-outline" size={26} />
@@ -371,10 +384,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 24,
     paddingBottom: 36
-  },
-  currencyRow: {
-    flexDirection: 'row',
-    gap: 8
   },
   documentAction: {
     color: colors.onSurfaceVariant,
@@ -559,6 +568,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 22
+  },
+  ruleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    minHeight: 24
+  },
+  ruleValid: {
+    color: '#73E6A2'
   },
   rules: {
     marginBottom: 22,

@@ -11,7 +11,7 @@ export async function getHomeAuctions() {
       s.hora AS time,
       s.estado AS status,
       s.categoria AS category,
-      s.moneda AS currency,
+      'ARS' AS currency,
       s.ubicacion AS location,
       COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl,
       p.descripcion_catalogo AS description,

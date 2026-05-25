@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,24 +11,35 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { getPaymentMethods } from '../backend/paymentService';
+import { deletePaymentMethod, getPaymentMethods } from '../backend/paymentService';
 import { colors, radii, shadows } from '../theme';
 
-export default function PaymentMethodsScreen({ onAdd, onBack, onContinue, user }) {
+export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, user }) {
   const [methods, setMethods] = useState([]);
+  const [methodToDelete, setMethodToDelete] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [selectedMethodId, setSelectedMethodId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const verifiedTotal = useMemo(
+  const selectedMethod = useMemo(
     () =>
-      methods
-        .filter((method) => method.verified === 'si')
-        .reduce((total, method) => total + Number(method.amount || 0), 0),
-    [methods]
+      methods.find((method) => method.id === selectedMethodId) ??
+      methods.find((method) => method.verified === 'si') ??
+      methods[0],
+    [methods, selectedMethodId]
   );
 
   async function load() {
     const rows = await getPaymentMethods(user.clienteId);
     setMethods(rows);
+    setSelectedMethodId((currentId) => {
+      if (rows.some((method) => method.id === currentId)) {
+        return currentId;
+      }
+
+      return rows.find((method) => method.verified === 'si')?.id ?? rows[0]?.id ?? null;
+    });
   }
 
   useEffect(() => {
@@ -38,6 +50,20 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onContinue, user }
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  }
+
+  async function removePayment(paymentId) {
+    setDeletingId(paymentId);
+
+    try {
+      const paymentCount = await deletePaymentMethod(user.clienteId, paymentId);
+      onUserUpdated?.({ ...user, paymentCount });
+      setMethodToDelete(null);
+      setSuccessMessage('Metodo de pago eliminado correctamente.');
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -75,9 +101,11 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onContinue, user }
           </View>
           <View style={styles.walletCopy}>
             <Text style={styles.walletTitle}>Billetera Elite</Text>
-            <Text style={styles.walletSubtitle}>Garantia verificada disponible</Text>
+            <Text style={styles.walletSubtitle}>
+              {selectedMethod ? getMethodSummary(selectedMethod) : 'Sin metodo seleccionado'}
+            </Text>
           </View>
-          <Text style={styles.walletAmount}>{formatMoney(verifiedTotal)}</Text>
+          <Text style={styles.walletAmount}>{formatMoney(selectedMethod?.amount ?? 0)}</Text>
         </View>
 
         <View style={styles.sectionHeader}>
@@ -100,16 +128,20 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onContinue, user }
             showsHorizontalScrollIndicator={false}
           >
             {methods.map((method) => (
-              <PaymentCard key={method.id} method={method} />
+              <PaymentCard
+                deleting={deletingId === method.id}
+                key={method.id}
+                method={method}
+                onDelete={() => setMethodToDelete(method)}
+                onSelect={() => setSelectedMethodId(method.id)}
+                selected={selectedMethod?.id === method.id}
+              />
             ))}
           </ScrollView>
         )}
       </ScrollView>
 
       <View style={styles.bottomActions}>
-        <Pressable onPress={onContinue} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Ir al inicio</Text>
-        </Pressable>
         <Pressable onPress={onAdd} style={styles.fab}>
           <LinearGradient
             colors={[colors.primary, colors.primaryContainer]}
@@ -119,17 +151,28 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onContinue, user }
           </LinearGradient>
         </Pressable>
       </View>
+
+      <ConfirmDeleteModal
+        deleting={Boolean(deletingId)}
+        method={methodToDelete}
+        onCancel={() => setMethodToDelete(null)}
+        onConfirm={() => removePayment(methodToDelete.id)}
+      />
+      <SuccessModal message={successMessage} onClose={() => setSuccessMessage('')} />
     </View>
   );
 }
 
-function PaymentCard({ method }) {
+function PaymentCard({ deleting, method, onDelete, onSelect, selected }) {
   const pending = method.verified !== 'si';
   const title = getMethodTitle(method);
   const mask = getMethodMask(method);
 
   return (
-    <View style={[styles.paymentCard, pending && styles.paymentCardPending]}>
+    <Pressable
+      onPress={onSelect}
+      style={[styles.paymentCard, pending && styles.paymentCardPending, selected && styles.paymentCardSelected]}
+    >
       <View style={styles.paymentCardTop}>
         <View>
           <Text style={styles.paymentBrand}>{title}</Text>
@@ -149,9 +192,65 @@ function PaymentCard({ method }) {
 
       <View style={styles.paymentCardBottom}>
         <Text style={styles.paymentMask}>{mask}</Text>
-        <Text style={styles.paymentAmount}>{formatMoney(method.amount, method.currency)}</Text>
+        <View style={styles.paymentFooter}>
+          <Text style={styles.paymentAmount}>{formatMoney(method.amount)}</Text>
+          <Pressable disabled={deleting} onPress={onDelete} style={styles.deleteButton}>
+            <MaterialCommunityIcons
+              color={colors.error}
+              name={deleting ? 'timer-sand' : 'trash-can-outline'}
+              size={18}
+            />
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </Pressable>
+  );
+}
+
+function ConfirmDeleteModal({ deleting, method, onCancel, onConfirm }) {
+  return (
+    <Modal transparent animationType="fade" visible={Boolean(method)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalIconDanger}>
+            <MaterialCommunityIcons color={colors.error} name="trash-can-outline" size={30} />
+          </View>
+          <Text style={styles.modalTitle}>Eliminar medio de pago</Text>
+          <Text style={styles.modalCopy}>
+            {method
+              ? `Vas a eliminar ${getKindLabel(method.type)} ${getMethodMask(method)}. Esta accion no se puede deshacer.`
+              : ''}
+          </Text>
+          <View style={styles.modalActions}>
+            <Pressable disabled={deleting} onPress={onCancel} style={styles.modalSecondary}>
+              <Text style={styles.modalSecondaryText}>Cancelar</Text>
+            </Pressable>
+            <Pressable disabled={deleting} onPress={onConfirm} style={styles.modalDanger}>
+              <Text style={styles.modalDangerText}>{deleting ? 'Eliminando...' : 'Eliminar'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function SuccessModal({ message, onClose }) {
+  return (
+    <Modal transparent animationType="fade" visible={Boolean(message)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalIconSuccess}>
+            <MaterialCommunityIcons color="#73E6A2" name="check-circle-outline" size={32} />
+          </View>
+          <Text style={styles.modalTitle}>Listo</Text>
+          <Text style={styles.modalCopy}>{message}</Text>
+          <Pressable onPress={onClose} style={styles.modalPrimary}>
+            <Text style={styles.modalPrimaryText}>Aceptar</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -173,8 +272,12 @@ function getKindLabel(type) {
   return 'Validacion fisica';
 }
 
-function formatMoney(value, currency = 'ARS') {
-  return `${currency} ${Number(value || 0).toLocaleString('es-AR', {
+function getMethodSummary(method) {
+  return `${getKindLabel(method.type)} seleccionado - ${getMethodMask(method)}`;
+}
+
+function formatMoney(value) {
+  return `$ ${Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   })}`;
 }
@@ -253,6 +356,103 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase'
   },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8
+  },
+  modalCard: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(72, 69, 81, 0.34)',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 22,
+    width: '86%'
+  },
+  modalCopy: {
+    color: colors.onSurfaceVariant,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 18,
+    textAlign: 'center'
+  },
+  modalDanger: {
+    alignItems: 'center',
+    backgroundColor: colors.error,
+    borderRadius: radii.full,
+    flex: 1,
+    height: 48,
+    justifyContent: 'center'
+  },
+  modalDangerText: {
+    color: colors.onError,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modalIconDanger: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 180, 171, 0.12)',
+    borderRadius: radii.full,
+    height: 58,
+    justifyContent: 'center',
+    marginBottom: 14,
+    width: 58
+  },
+  modalIconSuccess: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(115, 230, 162, 0.12)',
+    borderRadius: radii.full,
+    height: 58,
+    justifyContent: 'center',
+    marginBottom: 14,
+    width: 58
+  },
+  modalOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 5, 43, 0.72)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20
+  },
+  modalPrimary: {
+    alignItems: 'center',
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    height: 48,
+    justifyContent: 'center'
+  },
+  modalPrimaryText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modalSecondary: {
+    alignItems: 'center',
+    borderColor: 'rgba(147, 143, 156, 0.38)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flex: 1,
+    height: 48,
+    justifyContent: 'center'
+  },
+  modalSecondaryText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modalTitle: {
+    color: colors.onSurface,
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 8,
+    textAlign: 'center'
+  },
   paymentAmount: {
     color: colors.primary,
     fontSize: 13,
@@ -274,8 +474,25 @@ const styles = StyleSheet.create({
     width: 288,
     ...shadows.ambient
   },
+  paymentCardSelected: {
+    borderColor: colors.primary,
+    borderWidth: 2
+  },
   paymentCardBottom: {
     gap: 6
+  },
+  paymentFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  deleteButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 180, 171, 0.12)',
+    borderRadius: radii.full,
+    height: 34,
+    justifyContent: 'center',
+    width: 34
   },
   paymentCardPending: {
     backgroundColor: colors.surfaceContainer
@@ -313,22 +530,6 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 19,
     fontWeight: '900'
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(38, 24, 62, 0.92)',
-    borderColor: 'rgba(147, 143, 156, 0.34)',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    flex: 1,
-    height: 54,
-    justifyContent: 'center'
-  },
-  secondaryButtonText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase'
   },
   statusChip: {
     alignItems: 'center',

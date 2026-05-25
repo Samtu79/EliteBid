@@ -16,7 +16,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { login } from '../backend/authService';
 import { colors, radii, shadows } from '../theme';
 
-export default function LoginScreen({ onLogin, onRegister }) {
+export default function LoginScreen({ onForgotPassword, onLogin, onRegister }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,6 +84,10 @@ export default function LoginScreen({ onLogin, onRegister }) {
               value={password}
             />
           </View>
+
+          <Pressable onPress={onForgotPassword} style={styles.forgotButton}>
+            <Text style={styles.forgotButtonText}>Olvide mi contrasena</Text>
+          </Pressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -166,6 +170,18 @@ const styles = StyleSheet.create({
   },
   fieldGroup: {
     marginBottom: 16
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+    marginTop: -4,
+    paddingVertical: 4
+  },
+  forgotButtonText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase'
   },
   input: {
     backgroundColor: colors.surfaceHigh,

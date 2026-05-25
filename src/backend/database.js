@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS subastas (
   tiene_deposito TEXT CHECK (tiene_deposito IN ('si', 'no')),
   seguridad_propia TEXT CHECK (seguridad_propia IN ('si', 'no')),
   categoria TEXT CHECK (categoria IN ('comun', 'especial', 'plata', 'oro', 'platino')),
-  moneda TEXT CHECK (moneda IN ('ARS', 'USD')) DEFAULT 'ARS',
+  moneda TEXT CHECK (moneda = 'ARS') DEFAULT 'ARS',
   imagen_uri TEXT,
   FOREIGN KEY (subastador) REFERENCES subastadores (identificador)
 );
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS medios_pago (
   cliente INTEGER NOT NULL,
   tipo TEXT CHECK (tipo IN ('cuenta', 'tarjeta', 'cheque')) NOT NULL,
   detalle TEXT NOT NULL,
-  moneda TEXT CHECK (moneda IN ('ARS', 'USD')) DEFAULT 'ARS',
+  moneda TEXT CHECK (moneda = 'ARS') DEFAULT 'ARS',
   monto_garantia REAL DEFAULT 0,
   verificado TEXT CHECK (verificado IN ('si', 'no')) DEFAULT 'no',
   FOREIGN KEY (cliente) REFERENCES clientes (identificador)
@@ -192,6 +192,18 @@ CREATE TABLE IF NOT EXISTS sesiones (
   expira_en TEXT NOT NULL,
   FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
 );
+
+CREATE TABLE IF NOT EXISTS penalidades (
+  identificador INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente INTEGER NOT NULL,
+  titulo TEXT NOT NULL,
+  descripcion TEXT NOT NULL,
+  importe REAL NOT NULL DEFAULT 0,
+  estado TEXT CHECK (estado IN ('activa', 'pagada', 'vencida')) DEFAULT 'activa',
+  vencimiento TEXT,
+  creado_en TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente) REFERENCES clientes (identificador)
+);
 `;
 
 export async function getDatabase() {
@@ -207,9 +219,43 @@ export async function initDatabase() {
 
   await db.execAsync(schema);
   await ensureReferenceData(db);
+  await enforcePesoCurrency(db);
   await seedDatabase(db);
+  await ensurePenaltySeed(db);
 
   return db;
+}
+
+async function ensurePenaltySeed(db) {
+  const person = await db.getFirstAsync('SELECT identificador FROM personas WHERE identificador = ?', [1]);
+
+  if (!person) {
+    return;
+  }
+
+  const existing = await db.getFirstAsync('SELECT COUNT(*) AS total FROM penalidades WHERE cliente = ?', [1]);
+
+  if (existing?.total > 0) {
+    return;
+  }
+
+  await db.runAsync(
+    `INSERT INTO penalidades (cliente, titulo, descripcion, importe, estado, vencimiento)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      1,
+      'Retraso en pago',
+      'Incumplimiento de plazo para Rolex Daytona 1968. La cuenta tiene restricciones temporales de puja.',
+      15000,
+      'activa',
+      '2026-06-02'
+    ]
+  );
+}
+
+async function enforcePesoCurrency(db) {
+  await db.runAsync("UPDATE subastas SET moneda = 'ARS' WHERE moneda IS NULL OR moneda <> 'ARS'");
+  await db.runAsync("UPDATE medios_pago SET moneda = 'ARS' WHERE moneda IS NULL OR moneda <> 'ARS'");
 }
 
 async function ensureReferenceData(db) {
@@ -295,7 +341,7 @@ async function seedDatabase(db) {
     time: '21:30',
     status: 'abierta',
     category: 'platino',
-    currency: 'USD',
+    currency: 'ARS',
     location: 'Salon Nocturne, Puerto Madero',
     image:
       'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=900&q=80',

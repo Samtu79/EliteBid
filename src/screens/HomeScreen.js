@@ -23,7 +23,7 @@ const categoryLabel = {
   platino: 'Platino'
 };
 
-export default function HomeScreen({ user, onOpenPayments, onSignOut }) {
+export default function HomeScreen({ user, onOpenPayments, onOpenProfile, onSignOut }) {
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
   const [summary, setSummary] = useState({ verifiedPayments: 0, totalBids: 0 });
@@ -72,9 +72,7 @@ export default function HomeScreen({ user, onOpenPayments, onSignOut }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Pressable style={styles.iconButton}>
-            <MaterialCommunityIcons color={colors.onSurfaceVariant} name="arrow-left" size={24} />
-          </Pressable>
+          <View style={styles.headerSpacer} />
           <Text style={styles.logo}>Elite Bid</Text>
           <Pressable onPress={onSignOut} style={styles.iconButton}>
             <MaterialCommunityIcons color={colors.onSurfaceVariant} name="logout" size={22} />
@@ -129,7 +127,7 @@ export default function HomeScreen({ user, onOpenPayments, onSignOut }) {
         <NavItem active icon="home-variant" label="Inicio" />
         <NavItem icon="heart-outline" label="Favoritos" />
         <NavItem icon="credit-card-outline" label="Pagos" onPress={onOpenPayments} />
-        <NavItem icon="account-outline" label="Perfil" />
+        <NavItem icon="account-outline" label="Perfil" onPress={onOpenProfile} />
       </View>
     </View>
   );
@@ -173,7 +171,7 @@ function AuctionCard({ auction }) {
           {auction.title}
         </Text>
         <Text style={styles.cardLabel}>Puja actual</Text>
-        <Text style={styles.cardPrice}>{formatMoney(auction.currentBid, auction.currency)}</Text>
+        <Text style={styles.cardPrice}>{formatMoney(auction.currentBid)}</Text>
       </View>
     </Pressable>
   );
@@ -189,7 +187,7 @@ function AuctionListItem({ auction }) {
           {auction.title}
         </Text>
         <Text style={styles.listEstimate}>
-          Base {formatMoney(auction.basePrice, auction.currency)}
+          Base {formatMoney(auction.basePrice)}
         </Text>
       </View>
       <View style={styles.datePill}>
@@ -212,12 +210,12 @@ function NavItem({ active, icon, label, onPress }) {
   );
 }
 
-function formatMoney(value, currency) {
+function formatMoney(value) {
   const amount = Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   });
 
-  return `${currency} ${amount}`;
+  return `$ ${amount}`;
 }
 
 function formatShortDate(date) {
@@ -362,6 +360,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     height: 44,
     justifyContent: 'center',
+    width: 44
+  },
+  headerSpacer: {
+    height: 44,
     width: 44
   },
   list: {

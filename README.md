@@ -29,11 +29,16 @@ Elite1234
 - `src/backend/schema.sql`: version legible del esquema SQLite convertido desde el SQL original.
 - `src/backend/authService.js`: login, creacion de sesion y cierre de sesion.
 - `src/backend/paymentService.js`: listado y alta de cuenta bancaria, tarjeta o cheque.
+- `src/backend/profileService.js`: consulta y actualizacion de datos de perfil.
+- `src/backend/penaltyService.js`: listado de penalidades del usuario.
 - `src/backend/auctionService.js`: consultas para el home.
 - `src/screens/LoginScreen.js`: pantalla de acceso con estetica Nocturne Velvet.
 - `src/screens/RegisterScreen.js`: registro paso 1 y creacion de clave.
 - `src/screens/PaymentMethodsScreen.js`: billetera y medios de pago registrados.
 - `src/screens/AddPaymentScreen.js`: alta de tarjeta, cuenta bancaria o cheque certificado.
+- `src/screens/ProfileScreen.js`: perfil del usuario, edicion de datos, pagos y cierre de sesion.
+- `src/screens/PenaltiesScreen.js`: listado de penalidades del usuario.
+- `src/screens/ResetPasswordScreen.js`: recuperacion de clave con correo o documento.
 - `src/screens/HomeScreen.js`: home con subastas abiertas, proximas subastas y estado de usuario.
 
 ## Notas

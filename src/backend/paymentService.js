@@ -32,8 +32,25 @@ export async function addPaymentMethod(clienteId, payload) {
   await db.runAsync(
     `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [clienteId, payload.type, detail, payload.currency, Number(payload.amount), verified]
+    [clienteId, payload.type, detail, 'ARS', Number(payload.amount), verified]
   );
+
+  const summary = await db.getFirstAsync(
+    `SELECT COUNT(*) AS paymentCount
+     FROM medios_pago
+     WHERE cliente = ?`,
+    [clienteId]
+  );
+
+  return summary?.paymentCount ?? 0;
+}
+
+export async function deletePaymentMethod(clienteId, paymentId) {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM medios_pago WHERE identificador = ? AND cliente = ?', [
+    paymentId,
+    clienteId
+  ]);
 
   const summary = await db.getFirstAsync(
     `SELECT COUNT(*) AS paymentCount
@@ -61,6 +78,10 @@ function validatePayment(payload) {
       ['expiry', 'Ingresa el vencimiento.'],
       ['cvv', 'Ingresa el CVV.']
     ]);
+
+    if (!isValidExpiry(payload.expiry)) {
+      throw new Error('Ingresa el vencimiento con formato MM/AA.');
+    }
   }
 
   if (payload.type === 'cuenta') {
@@ -146,4 +167,16 @@ function detectCardBrand(value) {
   if (digits.startsWith('3')) return 'Amex';
 
   return 'Tarjeta';
+}
+
+function isValidExpiry(value) {
+  const match = String(value).match(/^(\d{2})\/(\d{2})$/);
+
+  if (!match) {
+    return false;
+  }
+
+  const month = Number(match[1]);
+
+  return month >= 1 && month <= 12;
 }
