@@ -1,49 +1,79 @@
 # EliteBid
 
-App Expo SDK 54 con React Native y backend local en SQLite para los circuitos:
-registro, creacion de clave, medios de pago, inicio de sesion, persistencia de
-sesion y home.
+Demo Expo + React Native para la segunda entrega del TPO DAI 1C2026. La app muestra un circuito mobile funcional de subastas premium: login, subastas, sala en vivo, pujas, favoritos, compras, perfil, medios de pago y penalidades.
 
-## Requisitos
+## Como correr la demo
+
+Requisitos:
 
 - Node.js 20.19 o superior
-- Expo Go compatible con SDK 54 o un emulador/dispositivo configurado
+- Expo SDK 54
 
-## Ejecutar
+Comandos:
 
 ```bash
 npm install
-npm start
+npm run web
 ```
 
-Credenciales de prueba:
+Expo abre una URL local. Si se quiere fijar puerto:
+
+```bash
+npm run web -- --port 3002
+```
+
+## Usuario de prueba
 
 ```text
-alejandro@elitebid.com
-Elite1234
+Email: alejandro@elitebid.com
+Clave: Elite1234
+Categoria: platino
 ```
 
-## Estructura
+## Circuito sugerido para mostrar
 
-- `src/backend/database.js`: abre SQLite, crea tablas y carga datos iniciales.
-- `src/backend/schema.sql`: version legible del esquema SQLite convertido desde el SQL original.
-- `src/backend/authService.js`: login, creacion de sesion y cierre de sesion.
-- `src/backend/paymentService.js`: listado y alta de cuenta bancaria, tarjeta o cheque.
-- `src/backend/profileService.js`: consulta y actualizacion de datos de perfil.
-- `src/backend/penaltyService.js`: listado de penalidades del usuario.
-- `src/backend/auctionService.js`: consultas para el home.
-- `src/screens/LoginScreen.js`: pantalla de acceso con estetica Nocturne Velvet.
-- `src/screens/RegisterScreen.js`: registro paso 1 y creacion de clave.
-- `src/screens/PaymentMethodsScreen.js`: billetera y medios de pago registrados.
-- `src/screens/AddPaymentScreen.js`: alta de tarjeta, cuenta bancaria o cheque certificado.
-- `src/screens/ProfileScreen.js`: perfil del usuario, edicion de datos, pagos y cierre de sesion.
-- `src/screens/PenaltiesScreen.js`: listado de penalidades del usuario.
-- `src/screens/ResetPasswordScreen.js`: recuperacion de clave con correo o documento.
-- `src/screens/HomeScreen.js`: home con subastas abiertas, proximas subastas y estado de usuario.
+1. Iniciar sesion con el usuario de prueba.
+2. Entrar a `Subastas`.
+3. Abrir `Patek Philippe Grand Complications`.
+4. Ingresar a la sala en vivo.
+5. Hacer una puja y verificar que cambia el monto/feed.
+6. Marcar y desmarcar favoritos para ver el popup.
+7. Entrar a `Compras`, confirmar pago y ver la compra pasar de `Puja ganadora` a `Compra pagada`.
+8. Entrar a `Perfil` y revisar estadisticas, foto y datos bloqueados.
+9. Entrar a `Penalidades`, pagar o marcar como solucionada.
 
-## Notas
+## Entregables
 
-El SQL original estaba en dialecto SQL Server. Para correr en SQLite se adaptaron
-`identity`, `go`, `varbinary(max)`, nombres con acentos, constraints y fechas.
-La autenticacion actual usa clave en texto plano porque es un prototipo local de
-entrega; al migrar a API REST conviene reemplazarlo por hash de password.
+- Informe segunda entrega: [`INFORME_SEGUNDA_ENTREGA.md`](./INFORME_SEGUNDA_ENTREGA.md)
+- Checklist QA con capturas: [`QA_CHECKLIST_SEGUNDA_ENTREGA.md`](./QA_CHECKLIST_SEGUNDA_ENTREGA.md)
+- Rama de GitHub usada para compartir: `informe-segunda-entrega`
+
+## Estado real del backend
+
+Esta version usa una capa de servicios local dentro de Expo:
+
+- Mobile: SQLite via `expo-sqlite`.
+- Web: adaptador `webDatabase.js` con persistencia en `localStorage`, para evitar bloqueos de Access Handles del navegador.
+
+No hay todavia un backend Express + TypeScript deployado ni JWT real firmado. La logica de negocio esta implementada localmente para demostrar el circuito integrado de la segunda entrega.
+
+## Estructura principal
+
+- `src/backend/database.js`: esquema, seed inicial y conexion a la base.
+- `src/backend/webDatabase.js`: base persistente para web.
+- `src/backend/authService.js`: login, registro, sesion y recupero de clave.
+- `src/backend/auctionService.js`: subastas, sala, pujas, favoritos y compras.
+- `src/backend/paymentService.js`: medios de pago.
+- `src/backend/profileService.js`: perfil, foto, estadisticas y datos editables.
+- `src/backend/penaltyService.js`: penalidades y resolucion.
+- `src/components/BottomNav.js`: barra inferior fija.
+- `src/components/AppToast.js`: popups/toasts reutilizables.
+- `src/screens/*`: pantallas mobile de la demo.
+
+## Validacion rapida
+
+```bash
+npx expo export --platform web
+```
+
+Ese comando verifica que el bundle web compile correctamente.

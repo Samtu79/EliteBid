@@ -343,10 +343,29 @@ function routeQuery(state, sql, params) {
       });
   }
 
+  if (
+    query.includes('from pujos p') &&
+    query.includes('where a.cliente = ? and p.identificador = ?') &&
+    query.includes("p.ganador = 'si'")
+  ) {
+    const bid = state.pujos.find(
+      (row) =>
+        row.identificador === params[1] &&
+        row.ganador === 'si' &&
+        findById(state.asistentes, row.asistente)?.cliente === params[0]
+    );
+
+    return bid ? [buildPurchaseRow(state, bid)] : [];
+  }
+
   if (query.includes('from pujos p') && query.includes("p.ganador = 'si'")) {
     return state.pujos
       .filter((bid) => bid.ganador === 'si' && findById(state.asistentes, bid.asistente)?.cliente === params[0])
-      .sort((a, b) => b.identificador - a.identificador)
+      .sort((a, b) => {
+        const aPaid = buildPurchaseRow(state, a).paymentStatus === 'pagada';
+        const bPaid = buildPurchaseRow(state, b).paymentStatus === 'pagada';
+        return Number(aPaid) - Number(bPaid) || b.identificador - a.identificador;
+      })
       .map((bid) => buildPurchaseRow(state, bid));
   }
 
@@ -530,6 +549,36 @@ function routeMutation(state, sql, params) {
     return result();
   }
 
+  if (query.includes('insert into registro_de_subasta')) {
+    const id = nextId(state.registro_de_subasta);
+    const [subasta, duenio, producto, cliente, importe, comision] = params;
+    const existing = state.registro_de_subasta.find(
+      (row) => row.subasta === subasta && row.producto === producto && row.cliente === cliente
+    );
+
+    if (!existing) {
+      state.registro_de_subasta.push({
+        identificador: id,
+        subasta,
+        duenio,
+        producto,
+        cliente,
+        importe,
+        comision
+      });
+    }
+
+    return result(existing?.identificador ?? id);
+  }
+
+  if (query.includes('update items_catalogo set subastado')) {
+    const item = findById(state.items_catalogo, params[1]);
+    if (item) {
+      item.subastado = params[0];
+    }
+    return result();
+  }
+
   if (query.includes('insert into asistentes')) {
     const id = nextId(state.asistentes);
     const [numero_postor, cliente, subasta] = params;
@@ -676,13 +725,26 @@ function buildPurchaseRow(state, bid) {
   const catalog = findById(state.catalogos, item?.catalogo);
   const auction = findById(state.subastas, catalog?.subasta);
   const product = findById(state.productos, item?.producto);
+  const receipt = state.registro_de_subasta.find(
+    (row) =>
+      row.cliente === findById(state.asistentes, bid.asistente)?.cliente &&
+      row.subasta === auction?.identificador &&
+      row.producto === product?.identificador
+  );
 
   return {
     amount: bid.importe,
+    auctionId: auction?.identificador,
+    commission: item?.comision,
     createdAt: bid.creado_en,
     currency: auction?.moneda,
     id: bid.identificador,
     imageUrl: product?.imagen_uri || auction?.imagen_uri,
+    itemId: item?.identificador,
+    ownerId: product?.duenio,
+    paymentStatus: receipt ? 'pagada' : 'pendiente',
+    productId: product?.identificador,
+    receiptId: receipt?.identificador ?? null,
     title: auction?.titulo,
     winner: bid.ganador
   };

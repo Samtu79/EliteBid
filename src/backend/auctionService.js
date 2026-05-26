@@ -227,8 +227,15 @@ export async function getUserPurchases(clienteId) {
       p.importe AS amount,
       p.creado_en AS createdAt,
       p.ganador AS winner,
+      s.identificador AS auctionId,
       s.titulo AS title,
       s.moneda AS currency,
+      prod.identificador AS productId,
+      prod.duenio AS ownerId,
+      i.identificador AS itemId,
+      i.comision AS commission,
+      r.identificador AS receiptId,
+      CASE WHEN r.identificador IS NULL THEN 'pendiente' ELSE 'pagada' END AS paymentStatus,
       COALESCE(prod.imagen_uri, s.imagen_uri) AS imageUrl
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
@@ -236,12 +243,73 @@ export async function getUserPurchases(clienteId) {
      JOIN catalogos c ON c.identificador = i.catalogo
      JOIN subastas s ON s.identificador = c.subasta
      JOIN productos prod ON prod.identificador = i.producto
+     LEFT JOIN registro_de_subasta r
+       ON r.cliente = a.cliente
+      AND r.subasta = s.identificador
+      AND r.producto = prod.identificador
      WHERE a.cliente = ? AND p.ganador = 'si'
-     ORDER BY p.identificador DESC`,
+     ORDER BY
+       CASE WHEN r.identificador IS NULL THEN 0 ELSE 1 END,
+       p.identificador DESC`,
     [clienteId]
   );
 
   return rows;
+}
+
+export async function settlePurchase(clienteId, bidId) {
+  const db = await getDatabase();
+  const purchase = await db.getFirstAsync(
+    `SELECT
+      p.identificador AS id,
+      p.importe AS amount,
+      s.identificador AS auctionId,
+      prod.identificador AS productId,
+      prod.duenio AS ownerId,
+      i.identificador AS itemId,
+      i.comision AS commission,
+      r.identificador AS receiptId
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     JOIN productos prod ON prod.identificador = i.producto
+     LEFT JOIN registro_de_subasta r
+       ON r.cliente = a.cliente
+      AND r.subasta = s.identificador
+      AND r.producto = prod.identificador
+     WHERE a.cliente = ? AND p.identificador = ? AND p.ganador = 'si'
+     LIMIT 1`,
+    [clienteId, bidId]
+  );
+
+  if (!purchase) {
+    throw new Error('No encontramos una compra pendiente para esa puja.');
+  }
+
+  if (purchase.receiptId) {
+    return getUserPurchases(clienteId);
+  }
+
+  await db.runAsync(
+    `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, importe, comision)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      purchase.auctionId,
+      purchase.ownerId,
+      purchase.productId,
+      clienteId,
+      purchase.amount,
+      purchase.commission
+    ]
+  );
+  await db.runAsync('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', [
+    'si',
+    purchase.itemId
+  ]);
+
+  return getUserPurchases(clienteId);
 }
 
 export async function getFavoriteAuctionIds(clienteId) {
