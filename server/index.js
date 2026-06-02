@@ -903,6 +903,7 @@ function toSessionUser(user, token) {
     email: user.email,
     nombre: user.nombre,
     rol: user.rol,
+    estado: user.estado,
     categoria: user.categoria,
     paymentCount: user.paymentCount ?? 0
   };

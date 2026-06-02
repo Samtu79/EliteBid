@@ -16,6 +16,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import PurchasesScreen from './src/screens/PurchasesScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
+import VerifyAccountScreen from './src/screens/VerifyAccountScreen';
 import { colors } from './src/theme';
 
 export default function App() {
@@ -37,6 +38,9 @@ export default function App() {
 
         if (mounted) {
           setUser(sessionUser);
+          if (sessionUser?.rol === 'invitado' && sessionUser?.estado === 'pendiente') {
+            setAppView('verifyAccount');
+          }
         }
       } catch (error) {
         console.warn('No se pudo iniciar EliteBid', error);
@@ -126,6 +130,15 @@ export default function App() {
             user={user}
           />
         )
+      ) : user && appView === 'verifyAccount' ? (
+        <VerifyAccountScreen
+          onContinueAsGuest={() => setAppView('home')}
+          onVerified={(verifiedUser) => {
+            setUser(verifiedUser);
+            setAppView('registrationPayments');
+          }}
+          user={user}
+        />
       ) : user && appView === 'registrationPayments' ? (
         <PaymentMethodsScreen
           onAdd={() => setAppView('registrationAddPayment')}
@@ -208,7 +221,7 @@ export default function App() {
           onRegistered={(sessionUser) =>
             handleAuthenticated(
               sessionUser,
-              sessionUser.rol === 'invitado' ? 'home' : 'registrationPayments'
+              sessionUser.rol === 'invitado' ? 'verifyAccount' : 'registrationPayments'
             )
           }
         />

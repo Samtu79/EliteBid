@@ -131,6 +131,8 @@ Este usuario ya esta verificado y tiene permisos completos.
    - `email_verificado = no`
 5. El usuario entra a la app como invitado.
 6. Se manda un codigo de un solo uso por mail.
+7. La app muestra una pantalla dedicada `Verifica tu cuenta`, donde puede ingresar el codigo y crear la contrasena definitiva.
+8. Si no quiere verificar en ese momento, puede tocar `Continuar como invitado`.
 
 Mientras es invitado:
 
@@ -144,8 +146,8 @@ Mientras es invitado:
 
 ### Verificacion por codigo
 
-1. Ir a `Perfil`.
-2. En el panel `Cuenta pendiente`, ingresar el codigo recibido por mail.
+1. Despues del registro, usar la pantalla `Verifica tu cuenta`.
+2. Ingresar el codigo recibido por mail.
 3. Crear una contrasena definitiva.
 4. La contrasena debe tener:
    - 8 a 72 caracteres.
@@ -159,6 +161,8 @@ Mientras es invitado:
    - `estado` pasa a `activo`.
    - `email_verificado` pasa a `si`.
    - Se borra el codigo de verificacion.
+
+Si el usuario saltea esa pantalla, puede hacer lo mismo despues desde `Perfil`, en el panel `Cuenta pendiente`.
 
 El codigo vence a los 15 minutos. Si vence, el usuario puede tocar `Reenviar codigo`.
 

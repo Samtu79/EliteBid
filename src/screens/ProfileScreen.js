@@ -14,9 +14,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { completeVerification, resendVerificationEmail } from '../backend/authService';
 import { getUserProfile, updateProfilePhoto, updateUserProfile } from '../backend/profileService';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
+import VerificationPanel from '../components/VerificationPanel';
 import { colors, radii, shadows } from '../theme';
 
 export default function ProfileScreen({
@@ -37,17 +37,10 @@ export default function ProfileScreen({
     documento: '',
     legalAddress: ''
   });
-  const [verificationForm, setVerificationForm] = useState({
-    code: '',
-    password: '',
-    confirmPassword: ''
-  });
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
-  const [resendingVerification, setResendingVerification] = useState(false);
-  const [completingVerification, setCompletingVerification] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -79,10 +72,6 @@ export default function ProfileScreen({
 
   function updateField(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateVerificationField(key, value) {
-    setVerificationForm((current) => ({ ...current, [key]: value }));
   }
 
   async function saveProfile() {
@@ -148,47 +137,6 @@ export default function ProfileScreen({
     }
   }
 
-  async function resendVerification() {
-    setError('');
-    setMessage('');
-    setResendingVerification(true);
-
-    try {
-      const result = await resendVerificationEmail(form.email);
-      setMessage(
-        result.verificationEmailSent
-          ? 'Te reenviamos el codigo de un solo uso.'
-          : 'La cuenta sigue pendiente. No se pudo enviar el mail real.'
-      );
-    } catch (resendError) {
-      setError(resendError.message);
-    } finally {
-      setResendingVerification(false);
-    }
-  }
-
-  async function finishVerification() {
-    setError('');
-    setMessage('');
-    setCompletingVerification(true);
-
-    try {
-      const updatedUser = await completeVerification({
-        email: form.email,
-        code: verificationForm.code,
-        password: verificationForm.password,
-        confirmPassword: verificationForm.confirmPassword
-      });
-      setVerificationForm({ code: '', password: '', confirmPassword: '' });
-      onUserUpdated(updatedUser);
-      setMessage('Cuenta verificada. Ya podes agregar medios de pago y participar.');
-    } catch (verificationError) {
-      setError(verificationError.message);
-    } finally {
-      setCompletingVerification(false);
-    }
-  }
-
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -198,15 +146,6 @@ export default function ProfileScreen({
   }
 
   const guest = user.rol === 'invitado';
-  const passwordStatus = getPasswordStatus(verificationForm.password, verificationForm.confirmPassword);
-  const canSubmitVerification =
-    verificationForm.code.replace(/\D/g, '').length === 6 &&
-    passwordStatus.length &&
-    passwordStatus.letter &&
-    passwordStatus.number &&
-    passwordStatus.symbol &&
-    passwordStatus.noSpaces &&
-    passwordStatus.matches;
 
   return (
     <View style={styles.container}>
@@ -268,74 +207,7 @@ export default function ProfileScreen({
         </View>
 
         {guest ? (
-          <View style={styles.pendingCard}>
-            <View style={styles.pendingHeader}>
-              <View style={styles.pendingIcon}>
-                <MaterialCommunityIcons color={colors.onPrimaryFixed} name="shield-key-outline" size={22} />
-              </View>
-              <View style={styles.pendingCopy}>
-                <Text style={styles.pendingTitle}>Cuenta pendiente</Text>
-                <Text style={styles.pendingText}>
-                  Revisa tu mail, ingresa el codigo de un solo uso y crea tu contrasena.
-                </Text>
-              </View>
-            </View>
-            <Field
-              keyboardType="numeric"
-              label="Codigo de un solo uso"
-              maxLength={6}
-              onChangeText={(value) => updateVerificationField('code', value)}
-              value={verificationForm.code}
-            />
-            <Field
-              label="Nueva contrasena"
-              onChangeText={(value) => updateVerificationField('password', value)}
-              secureTextEntry
-              value={verificationForm.password}
-            />
-            <View style={styles.passwordRules}>
-              <PasswordRule checked={passwordStatus.length} label="Entre 8 y 72 caracteres" />
-              <PasswordRule checked={passwordStatus.letter} label="Al menos una letra" />
-              <PasswordRule checked={passwordStatus.number} label="Al menos un numero" />
-              <PasswordRule checked={passwordStatus.symbol} label="Al menos un simbolo" />
-              <PasswordRule checked={passwordStatus.noSpaces} label="Sin espacios" />
-            </View>
-            <Field
-              label="Confirmar contrasena"
-              onChangeText={(value) => updateVerificationField('confirmPassword', value)}
-              secureTextEntry
-              value={verificationForm.confirmPassword}
-            />
-            {verificationForm.confirmPassword ? (
-              <PasswordRule checked={passwordStatus.matches} label="Las contrasenas coinciden" />
-            ) : null}
-            <View style={styles.verificationActions}>
-              <Pressable
-                disabled={resendingVerification}
-                onPress={resendVerification}
-                style={styles.secondaryVerificationButton}
-              >
-                {resendingVerification ? (
-                  <ActivityIndicator color={colors.primary} />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>Reenviar codigo</Text>
-                )}
-              </Pressable>
-              <Pressable
-                disabled={completingVerification || !canSubmitVerification}
-                onPress={finishVerification}
-                style={[styles.confirmVerificationButton, !canSubmitVerification && styles.confirmVerificationButtonDisabled]}
-              >
-                {completingVerification ? (
-                  <ActivityIndicator color={colors.onPrimaryFixed} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Confirmar</Text>
-                )}
-              </Pressable>
-            </View>
-            {error ? <Text style={styles.verificationError}>{error}</Text> : null}
-            {message ? <Text style={styles.verificationMessage}>{message}</Text> : null}
-          </View>
+          <VerificationPanel compact email={form.email} onVerified={onUserUpdated} />
         ) : null}
 
         <View style={styles.sectionHeader}>
@@ -503,30 +375,6 @@ function QuickAction({ disabled, icon, label, onPress }) {
       <Text style={styles.quickText}>{label}</Text>
     </Pressable>
   );
-}
-
-function PasswordRule({ checked, label }) {
-  return (
-    <View style={styles.passwordRule}>
-      <MaterialCommunityIcons
-        color={checked ? '#73E6A2' : colors.onSurfaceVariant}
-        name={checked ? 'check-circle' : 'circle-outline'}
-        size={15}
-      />
-      <Text style={[styles.passwordRuleText, checked && styles.passwordRuleTextOk]}>{label}</Text>
-    </View>
-  );
-}
-
-function getPasswordStatus(password = '', confirmPassword = '') {
-  return {
-    length: password.length >= 8 && password.length <= 72,
-    letter: /[A-Za-z]/.test(password),
-    number: /\d/.test(password),
-    symbol: /[^A-Za-z0-9]/.test(password),
-    noSpaces: password.length > 0 && !/\s/.test(password),
-    matches: password.length > 0 && password === confirmPassword
-  };
 }
 
 function initials(name = '') {
@@ -791,62 +639,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900'
   },
-  passwordRule: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    minHeight: 22
-  },
-  passwordRules: {
-    gap: 5,
-    marginBottom: 14,
-    marginTop: -6
-  },
-  passwordRuleText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  passwordRuleTextOk: {
-    color: '#73E6A2'
-  },
-  pendingCard: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: 'rgba(204, 193, 255, 0.24)',
-    borderRadius: 24,
-    borderWidth: 1,
-    marginBottom: 20,
-    padding: 16
-  },
-  pendingCopy: {
-    flex: 1
-  },
-  pendingHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14
-  },
-  pendingIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.primaryContainer,
-    borderRadius: radii.full,
-    height: 44,
-    justifyContent: 'center',
-    width: 44
-  },
-  pendingText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 18,
-    marginTop: 3
-  },
-  pendingTitle: {
-    color: colors.onSurface,
-    fontSize: 16,
-    fontWeight: '900'
-  },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: colors.primaryContainer,
@@ -928,15 +720,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
-  secondaryVerificationButton: {
-    alignItems: 'center',
-    borderColor: 'rgba(147, 143, 156, 0.34)',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    flex: 1,
-    height: 48,
-    justifyContent: 'center'
-  },
   sectionAction: {
     color: colors.primary,
     fontSize: 12,
@@ -1004,33 +787,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 42
   },
-  verificationActions: {
-    flexDirection: 'row',
-    gap: 10
-  },
-  verificationError: {
-    color: colors.error,
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 18,
-    marginTop: 12
-  },
-  verificationMessage: {
-    color: '#73E6A2',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 18,
-    marginTop: 12
-  },
-  confirmVerificationButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primaryContainer,
-    borderRadius: radii.full,
-    flex: 1,
-    height: 48,
-    justifyContent: 'center'
-  },
-  confirmVerificationButtonDisabled: {
-    opacity: 0.45
-  }
+ 
 });
