@@ -509,3 +509,112 @@ node --check server/index.js
 node --check server/emailService.js
 npx expo export --platform web
 ```
+
+## 15. Trazabilidad con el enunciado
+
+| Requisito | Donde se cumple | Estado |
+| --- | --- | --- |
+| Registro en dos etapas | `RegisterScreen`, `VerifyAccountScreen`, `/api/auth/register-guest`, `/api/auth/complete-verification` | Completo para segunda entrega |
+| Verificacion por mail | `server/emailService.js`, `VerificationPanel` | Completo con SMTP/Resend y fallback de reenvio |
+| Invitado con permisos limitados | `getAuctionRows`, `assertNotGuest`, pantallas de Perfil/Pagos/Subastas | Completo |
+| Catalogo publico | `GET /api/subastas` | Completo: sin sesion ve futuras sin precios |
+| Usuario registrado ve precios | `GET /api/subastas` con sesion cliente | Completo |
+| Restriccion por categoria | `hasCategoryAccess`, `enterAuctionRoom` | Completo |
+| Medio de pago requerido para pujar | `enterAuctionRoom`, `medios_pago.verificado` | Completo |
+| Pujas con reglas 1% y 20% | `placeAuctionBid`, `LiveAuctionScreen` | Completo, excepto tiempo real real |
+| Excepcion oro/platino para limites de puja | `placeAuctionBid` | Completo segun categoria de subasta |
+| Gestion de medios de pago | `AddPaymentScreen`, `PaymentMethodsScreen`, `medios_pago` | Completo |
+| Compras y penalidades | `PurchasesScreen`, `PenaltiesScreen`, `registro_de_subasta`, `penalidades` | Parcial suficiente para segunda entrega |
+| Solicitud de venta de bienes | `PurchasesScreen`, `/api/solicitudes-venta`, `solicitudes_lotes` | Completo para carga y seguimiento inicial |
+| Metricas de usuario | `HomeScreen`, `ProfileScreen`, `/api/users/:id/summary` | Completo |
+| Categorias de usuario | Perfil, modal de categoria, `categoryRequirements` | Completo para explicar ascenso |
+
+## 16. Categorias y acceso
+
+La categoria define en que subastas puede participar el usuario. La regla es:
+
+```text
+comun participa en comun
+especial participa en comun y especial
+plata participa en comun, especial y plata
+oro participa en comun, especial, plata y oro
+platino participa en todas
+```
+
+Un usuario verificado puede ver subastas de categoria superior y sus precios, pero no puede entrar a la sala ni pujar si su categoria no alcanza.
+
+El ascenso de categoria se calcula con actividad real:
+
+- `comun`: cuenta verificada y admitida.
+- `especial`: 2 pujas registradas y sin penalidades activas.
+- `plata`: 5 pujas, 1 subasta ganada y sin penalidades activas.
+- `oro`: 10 pujas, 2 subastas ganadas, $1.000.000 invertido y sin penalidades activas.
+- `platino`: 20 pujas, 5 subastas ganadas, $5.000.000 invertido y sin penalidades activas.
+
+Los medios de pago no suben categoria. Se usan como requisito operativo para poder pujar.
+
+En Perfil, tocando la insignia de categoria, se ve:
+
+- Categoria actual.
+- Proxima categoria.
+- Pujas requeridas.
+- Subastas ganadas requeridas.
+- Plata invertida requerida.
+- Penalidades activas.
+
+## 17. Endpoints principales
+
+| Metodo | Endpoint | Uso |
+| --- | --- | --- |
+| `GET` | `/api/health` | Verifica conexion backend/base |
+| `POST` | `/api/auth/login` | Login con clave o codigo OTP si la cuenta esta pendiente |
+| `POST` | `/api/auth/register-guest` | Registro inicial como invitado |
+| `POST` | `/api/auth/resend-verification` | Reenvia codigo OTP |
+| `POST` | `/api/auth/complete-verification` | Verifica cuenta y crea clave definitiva |
+| `GET` | `/api/auth/session` | Recupera sesion activa |
+| `DELETE` | `/api/auth/session` | Cierra sesion |
+| `POST` | `/api/auth/reset-password` | Recuperacion de clave |
+| `GET` | `/api/subastas` | Catalogo segun rol/sesion |
+| `GET` | `/api/subastas/:auctionId` | Detalle de subasta |
+| `POST` | `/api/subastas/:auctionId/registrar` | Entrada a sala |
+| `POST` | `/api/subastas/:auctionId/pujas` | Registrar puja |
+| `GET` | `/api/usuarios/me/medios-de-pago` | Lista medios de pago |
+| `POST` | `/api/usuarios/me/medios-de-pago` | Crea medio de pago |
+| `GET` | `/api/users/:clienteId/summary` | Metricas y categoria |
+| `POST` | `/api/solicitudes-venta` | Solicitud de venta de lote |
+
+## 18. QA ejecutado
+
+Casos probados por API:
+
+- Login correcto e incorrecto.
+- Registro con DNI frente/dorso.
+- Registro con DNI sin dorso.
+- Registro con pasaporte y una sola foto.
+- Email duplicado.
+- Documento duplicado.
+- Invitado ve futuras sin precios.
+- Invitado no puede agregar pagos ni modificar perfil.
+- Login de invitado con OTP correcto e incorrecto.
+- Verificacion con codigo correcto, incorrecto y vencido.
+- Contrasena debil rechazada.
+- OTP usado no sirve mas.
+- Reset de contrasena.
+- Tarjeta invalida rechazada.
+- Tarjeta valida guardada.
+- Cliente comun ve subasta oro con precio.
+- Cliente comun no puede participar en subasta oro.
+- Cliente comun con pago entra a subasta comun.
+- Puja igual a la actual rechazada.
+
+Resultado: todos los casos pasaron.
+
+## 19. Pendientes para tercera entrega
+
+- Backend publicado online.
+- Front/app disponible para probar desde dispositivo.
+- Tiempo real real para pujas con WebSocket o SSE.
+- Cierre automatico de subasta y definicion final de ganador.
+- Control de garantia disponible contra compras acumuladas.
+- Soporte completo para subastas en USD.
+- Factura/envio/seguro con flujo completo.

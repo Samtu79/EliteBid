@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -14,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
+import { getUserSummary } from '../backend/auctionService';
 import { getUserProfile, updateProfilePhoto, updateUserProfile } from '../backend/profileService';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import VerificationPanel from '../components/VerificationPanel';
@@ -41,6 +43,8 @@ export default function ProfileScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [categorySummary, setCategorySummary] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -48,11 +52,15 @@ export default function ProfileScreen({
     let mounted = true;
 
     async function load() {
-      const data = await getUserProfile(user.clienteId);
+      const [data, summary] = await Promise.all([
+        getUserProfile(user.clienteId),
+        user.rol === 'invitado' ? Promise.resolve(null) : getUserSummary(user.clienteId)
+      ]);
 
       if (!mounted) return;
 
       setProfile(data);
+      setCategorySummary(summary);
       setForm({
         firstName: data?.identityFirstName ?? '',
         lastName: data?.identityLastName ?? '',
@@ -162,6 +170,11 @@ export default function ProfileScreen({
           <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={24} />
         </Pressable>
       </View>
+      <CategoryModal
+        onClose={() => setCategoryModalVisible(false)}
+        summary={categorySummary}
+        visible={categoryModalVisible}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.spotlight}>
@@ -182,10 +195,15 @@ export default function ProfileScreen({
             </View>
           </Pressable>
           <Text style={styles.name}>{profile?.fullName}</Text>
-          <View style={styles.badge}>
+          <Pressable
+            disabled={guest}
+            onPress={() => setCategoryModalVisible(true)}
+            style={[styles.badge, guest && styles.badgeDisabled]}
+          >
             <MaterialCommunityIcons color={colors.primary} name="check-decagram" size={16} />
             <Text style={styles.badgeText}>{profile?.categoria ?? 'comun'}</Text>
-          </View>
+            {!guest ? <MaterialCommunityIcons color={colors.primary} name="chevron-right" size={15} /> : null}
+          </Pressable>
         </View>
 
         <View style={styles.statsRow}>
@@ -380,6 +398,76 @@ function QuickAction({ disabled, icon, label, onPress }) {
   );
 }
 
+function CategoryModal({ onClose, summary, visible }) {
+  const currentRule = summary?.categoryRequirements?.find((rule) => rule.category === summary.currentCategory);
+  const nextRule = summary?.nextCategoryRequirement;
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.modalBackdrop}>
+        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
+        <View style={styles.categoryDialog}>
+          <View style={styles.categoryDialogHeader}>
+            <View>
+              <Text style={styles.modalEyebrow}>Categoria actual</Text>
+              <Text style={styles.modalTitle}>{currentRule?.label ?? summary?.currentCategory ?? 'Comun'}</Text>
+            </View>
+            <Pressable onPress={onClose} style={styles.modalClose}>
+              <MaterialCommunityIcons color={colors.primary} name="close" size={22} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalCopy}>
+            {currentRule?.description ?? 'La categoria define en que subastas podes participar.'}
+          </Text>
+
+          {nextRule ? (
+            <>
+              <View style={styles.nextCategoryBox}>
+                <Text style={styles.nextCategoryLabel}>Proxima categoria</Text>
+                <Text style={styles.nextCategoryTitle}>{nextRule.label}</Text>
+                <Text style={styles.nextCategoryText}>{nextRule.description}</Text>
+              </View>
+              <View style={styles.progressList}>
+                <CategoryProgress current={summary.totalBids} label="Pujas registradas" target={nextRule.minBids} />
+                <CategoryProgress current={summary.totalWins} label="Subastas ganadas" target={nextRule.minWins} />
+                <CategoryProgress current={summary.invested} format={formatMoney} label="Plata invertida" target={nextRule.minInvested} />
+                <CategoryProgress current={summary.activePenaltyCount} inverted label="Penalidades activas" target={nextRule.maxActivePenalties} />
+              </View>
+            </>
+          ) : (
+            <View style={styles.nextCategoryBox}>
+              <Text style={styles.nextCategoryLabel}>Categoria maxima</Text>
+              <Text style={styles.nextCategoryTitle}>Platino</Text>
+              <Text style={styles.nextCategoryText}>Ya estas en el rango mas alto disponible para participar.</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function CategoryProgress({ current = 0, format = (value) => value, inverted = false, label, target }) {
+  if (target == null) return null;
+
+  const done = inverted ? current <= target : current >= target;
+  const ratio = inverted ? (done ? 1 : 0) : Math.min(1, Number(current || 0) / Number(target || 1));
+
+  return (
+    <View style={styles.progressItem}>
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressLabel}>{label}</Text>
+        <Text style={[styles.progressValue, done && styles.progressValueDone]}>
+          {inverted ? `${current}/${target}` : `${format(current)} / ${format(target)}`}
+        </Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${ratio * 100}%` }, done && styles.progressFillDone]} />
+      </View>
+    </View>
+  );
+}
+
 function initials(name = '') {
   return name
     .split(' ')
@@ -465,6 +553,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 14,
     paddingVertical: 7
+  },
+  badgeDisabled: {
+    opacity: 0.72
   },
   badgeText: {
     color: colors.primary,
@@ -790,6 +881,125 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 22,
     fontWeight: '900'
+  },
+  categoryDialog: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(204, 193, 255, 0.24)',
+    borderRadius: 24,
+    borderWidth: 1,
+    maxWidth: 460,
+    padding: 18,
+    width: '100%'
+  },
+  categoryDialogHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 5, 43, 0.78)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 18
+  },
+  modalClose: {
+    alignItems: 'center',
+    borderColor: 'rgba(204, 193, 255, 0.18)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40
+  },
+  modalCopy: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginBottom: 14
+  },
+  modalEyebrow: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modalTitle: {
+    color: colors.onSurface,
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 0,
+    marginTop: 3,
+    textTransform: 'capitalize'
+  },
+  nextCategoryBox: {
+    backgroundColor: colors.surfaceHigh,
+    borderColor: 'rgba(72, 69, 81, 0.28)',
+    borderRadius: 18,
+    borderWidth: 1,
+    marginBottom: 14,
+    padding: 14
+  },
+  nextCategoryLabel: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  nextCategoryText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4
+  },
+  nextCategoryTitle: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 3
+  },
+  progressFill: {
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    height: '100%'
+  },
+  progressFillDone: {
+    backgroundColor: '#73E6A2'
+  },
+  progressHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 7
+  },
+  progressItem: {
+    marginBottom: 12
+  },
+  progressLabel: {
+    color: colors.onSurface,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  progressList: {
+    marginTop: 2
+  },
+  progressTrack: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.full,
+    height: 8,
+    overflow: 'hidden'
+  },
+  progressValue: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  progressValueDone: {
+    color: '#73E6A2'
   },
   topBar: {
     alignItems: 'center',

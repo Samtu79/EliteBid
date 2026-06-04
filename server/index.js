@@ -12,6 +12,46 @@ require('dotenv').config();
 const app = express();
 const SESSION_DAYS = 7;
 const categoryRank = { comun: 1, especial: 2, plata: 3, oro: 4, platino: 5 };
+const categoryRequirements = [
+  {
+    category: 'comun',
+    label: 'Comun',
+    description: 'Cuenta verificada, admitida por la empresa y sin requisitos de actividad.'
+  },
+  {
+    category: 'especial',
+    label: 'Especial',
+    minBids: 2,
+    maxActivePenalties: 0,
+    description: '2 pujas registradas y sin penalidades activas.'
+  },
+  {
+    category: 'plata',
+    label: 'Plata',
+    minBids: 5,
+    minWins: 1,
+    maxActivePenalties: 0,
+    description: '5 pujas registradas, 1 subasta ganada y sin penalidades activas.'
+  },
+  {
+    category: 'oro',
+    label: 'Oro',
+    minBids: 10,
+    minWins: 2,
+    minInvested: 1000000,
+    maxActivePenalties: 0,
+    description: '10 pujas registradas, 2 subastas ganadas, $1.000.000 invertido y sin penalidades activas.'
+  },
+  {
+    category: 'platino',
+    label: 'Platino',
+    minBids: 20,
+    minWins: 5,
+    minInvested: 5000000,
+    maxActivePenalties: 0,
+    description: '20 pujas registradas, 5 subastas ganadas, $5.000.000 invertido y sin penalidades activas.'
+  }
+];
 
 app.use(cors());
 app.use(express.json({ limit: '30mb' }));
@@ -476,6 +516,7 @@ app.post('/api/usuarios/me/medios-de-pago', wrap(async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [viewer.clienteId, payment.type, JSON.stringify(buildPaymentDetail(payment)), 'ARS', payment.amount, verified]
   );
+  await refreshClientCategory(viewer.clienteId);
   res.status(201).json(await getUserPayments(viewer.clienteId));
 }));
 
@@ -614,17 +655,7 @@ app.post('/api/auctions/:auctionId/bids', wrap(async (req, res) => {
 
 app.get('/api/users/:clienteId/summary', wrap(async (req, res) => {
   const clienteId = parsePositiveInt(req.params.clienteId, 'Cliente invalido.');
-  const payments = await first(
-    `SELECT COUNT(*) AS verifiedPayments FROM medios_pago WHERE cliente = ? AND verificado = 'si'`,
-    [clienteId]
-  );
-  const bids = await first(
-    `SELECT COUNT(*) AS totalBids
-     FROM pujos p JOIN asistentes a ON a.identificador = p.asistente
-     WHERE a.cliente = ?`,
-    [clienteId]
-  );
-  res.json({ verifiedPayments: payments?.verifiedPayments ?? 0, totalBids: bids?.totalBids ?? 0 });
+  res.json(await getUserSummary(clienteId));
 }));
 
 app.get('/api/users/:clienteId/favorites/ids', wrap(async (req, res) => {
@@ -741,6 +772,7 @@ app.post('/api/users/:clienteId/payments', wrap(async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [clienteId, payment.type, JSON.stringify(buildPaymentDetail(payment)), 'ARS', payment.amount, verified]
   );
+  await refreshClientCategory(clienteId);
   const summary = await first('SELECT COUNT(*) AS paymentCount FROM medios_pago WHERE cliente = ?', [clienteId]);
   res.json(summary?.paymentCount ?? 0);
 }));
@@ -752,6 +784,7 @@ app.delete('/api/users/:clienteId/payments/:paymentId', wrap(async (req, res) =>
     parsePositiveInt(req.params.paymentId, 'Medio de pago invalido.'),
     clienteId
   ]);
+  await refreshClientCategory(clienteId);
   const summary = await first('SELECT COUNT(*) AS paymentCount FROM medios_pago WHERE cliente = ?', [clienteId]);
   res.json(summary?.paymentCount ?? 0);
 }));
@@ -812,11 +845,12 @@ app.post('/api/users/:clienteId/penalties/:penaltyId/settle', wrap(async (req, r
     penaltyId,
     clienteId
   ]);
+  await refreshClientCategory(clienteId);
   res.json(await getUserPenalties(clienteId));
 }));
 
 async function getAuctionRows(viewer = null) {
-  const guest = viewer?.rol === 'invitado';
+  const restrictedCatalog = !viewer || viewer.rol === 'invitado';
   const rows = await query(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
@@ -826,11 +860,11 @@ async function getAuctionRows(viewer = null) {
      JOIN catalogos c ON c.subasta = s.identificador
      JOIN items_catalogo i ON i.catalogo = c.identificador
      JOIN productos p ON p.identificador = i.producto
-     ${guest ? "WHERE s.estado = 'programada'" : ''}
+     ${restrictedCatalog ? "WHERE s.estado = 'programada'" : ''}
      ORDER BY CASE s.estado WHEN 'abierta' THEN 0 WHEN 'programada' THEN 1 ELSE 2 END, s.fecha ASC`
   );
 
-  return guest ? rows.map(redactAuctionPrice) : rows;
+  return restrictedCatalog ? rows.map(redactAuctionPrice) : rows;
 }
 
 async function getAuctionDetail(auctionId, clienteId) {
@@ -923,12 +957,11 @@ async function placeAuctionBid(clienteId, auctionId, amount) {
   if (amount <= 0) throw new Error('Ingresa un monto valido para pujar.');
 
   const detail = await enterAuctionRoom(clienteId, auctionId);
-  const userCategory = await getClientCategory(clienteId);
   const currentBid = Number(detail.currentBid || detail.basePrice || 0);
   const basePrice = Number(detail.basePrice || 0);
   const minBid = currentBid + basePrice * 0.01;
   const maxBid = currentBid + basePrice * 0.2;
-  const bypassRange = ['oro', 'platino'].includes(userCategory);
+  const bypassRange = ['oro', 'platino'].includes(detail.category);
 
   if (amount <= currentBid) throw new Error(`El monto debe superar la puja actual de ${formatMoney(currentBid)}.`);
   if (!bypassRange && amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
@@ -943,6 +976,7 @@ async function placeAuctionBid(clienteId, auctionId, amount) {
     'si'
   ]);
   await run('UPDATE items_catalogo SET puja_actual = ? WHERE identificador = ?', [amount, detail.itemId]);
+  await refreshClientCategory(clienteId);
 
   return {
     auction: await getAuctionDetail(auctionId, clienteId),
@@ -1063,6 +1097,20 @@ async function getUserPayments(clienteId) {
 }
 
 async function getUserSummary(clienteId) {
+  const metrics = await getCategoryMetrics(clienteId);
+  const currentCategory = await refreshClientCategory(clienteId, metrics);
+  const nextCategory = getNextCategory(currentCategory);
+
+  return {
+    ...metrics,
+    categoryRequirements,
+    currentCategory,
+    nextCategory,
+    nextCategoryRequirement: categoryRequirements.find((rule) => rule.category === nextCategory) ?? null
+  };
+}
+
+async function getCategoryMetrics(clienteId) {
   const payments = await first(
     `SELECT COUNT(*) AS verifiedPayments FROM medios_pago WHERE cliente = ? AND verificado = 'si'`,
     [clienteId]
@@ -1074,16 +1122,60 @@ async function getUserSummary(clienteId) {
     [clienteId]
   );
   const wins = await first(
-    `SELECT COUNT(*) AS totalWins
+    `SELECT COUNT(*) AS totalWins, COALESCE(SUM(p.importe), 0) AS invested
      FROM pujos p JOIN asistentes a ON a.identificador = p.asistente
      WHERE a.cliente = ? AND p.ganador = 'si'`,
     [clienteId]
   );
+  const penalties = await first(
+    `SELECT COUNT(*) AS activePenaltyCount
+     FROM penalidades
+     WHERE cliente = ? AND estado IN ('activa', 'vencida')`,
+    [clienteId]
+  );
+
   return {
-    totalBids: bids?.totalBids ?? 0,
-    totalWins: wins?.totalWins ?? 0,
-    verifiedPayments: payments?.verifiedPayments ?? 0
+    activePenaltyCount: Number(penalties?.activePenaltyCount ?? 0),
+    invested: Number(wins?.invested ?? 0),
+    totalBids: Number(bids?.totalBids ?? 0),
+    totalWins: Number(wins?.totalWins ?? 0),
+    verifiedPayments: Number(payments?.verifiedPayments ?? 0)
   };
+}
+
+async function refreshClientCategory(clienteId, metrics = null) {
+  const calculatedCategory = calculateCategory(metrics ?? await getCategoryMetrics(clienteId));
+  const currentCategory = await getClientCategory(clienteId);
+  const nextCategory = categoryRank[calculatedCategory] > categoryRank[currentCategory]
+    ? calculatedCategory
+    : currentCategory;
+
+  if (nextCategory !== currentCategory) {
+    await run('UPDATE clientes SET categoria = ? WHERE identificador = ?', [nextCategory, clienteId]);
+  }
+
+  return nextCategory;
+}
+
+function calculateCategory(metrics) {
+  return categoryRequirements.reduce((current, rule) => (
+    categoryRequirementMet(metrics, rule) ? rule.category : current
+  ), 'comun');
+}
+
+function categoryRequirementMet(metrics, rule) {
+  return (
+    (metrics.verifiedPayments ?? 0) >= (rule.minVerifiedPayments ?? 0) &&
+    (metrics.totalBids ?? 0) >= (rule.minBids ?? 0) &&
+    (metrics.totalWins ?? 0) >= (rule.minWins ?? 0) &&
+    (metrics.invested ?? 0) >= (rule.minInvested ?? 0) &&
+    (metrics.activePenaltyCount ?? 0) <= (rule.maxActivePenalties ?? Number.MAX_SAFE_INTEGER)
+  );
+}
+
+function getNextCategory(category) {
+  const index = categoryRequirements.findIndex((rule) => rule.category === category);
+  return index >= 0 ? categoryRequirements[index + 1]?.category ?? null : 'especial';
 }
 
 async function getUserPurchases(clienteId) {
@@ -1301,12 +1393,21 @@ function bearerToken(req) {
 }
 
 async function sendVerificationForUser({ email, name, token }) {
-  try {
-    return await sendVerificationEmail({ to: email, name, token });
-  } catch (error) {
+  const timeoutMs = Number(process.env.MAIL_RESPONSE_TIMEOUT_MS || 6000);
+  const sendPromise = sendVerificationEmail({ to: email, name, token }).catch((error) => {
     console.warn(`No se pudo enviar verificacion a ${email}: ${error.message}`);
     return { sent: false, skipped: false, reason: 'send_failed' };
-  }
+  });
+
+  return Promise.race([
+    sendPromise,
+    new Promise((resolve) => {
+      setTimeout(() => {
+        console.warn(`Envio de verificacion a ${email} demorado. La cuenta queda pendiente y puede reintentar.`);
+        resolve({ sent: false, skipped: false, reason: 'send_timeout' });
+      }, timeoutMs);
+    })
+  ]);
 }
 
 async function assertPendingGuestCode(user, codeValue) {

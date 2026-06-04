@@ -82,13 +82,13 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, user 
 
     return {
       bidStep,
-      canBypassRange: ['oro', 'platino'].includes(user.categoria),
+      canBypassRange: ['oro', 'platino'].includes(auction.category),
       currentBid,
       maxBid,
       minBid,
       typedAmount: parseCurrency(amount)
     };
-  }, [amount, auction, user.categoria]);
+  }, [amount, auction]);
 
   function adjustBid(direction) {
     const startingAmount = Number.isFinite(rules.typedAmount) && rules.typedAmount > 0

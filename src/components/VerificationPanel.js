@@ -5,6 +5,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { completeVerification, resendVerificationEmail } from '../backend/authService';
 import ErrorDialog from './ErrorDialog';
 import { colors, radii } from '../theme';
+import { getPasswordStatus, isPasswordReady, passwordRuleCopy } from '../utils/passwordRules';
 
 export default function VerificationPanel({
   compact = false,
@@ -19,17 +20,11 @@ export default function VerificationPanel({
   const [message, setMessage] = useState('');
   const [errorDialog, setErrorDialog] = useState('');
   const passwordStatus = useMemo(() => getPasswordStatus(form.password, form.confirmPassword), [form.password, form.confirmPassword]);
-  const canSubmit =
-    form.code.replace(/\D/g, '').length === 6 &&
-    passwordStatus.length &&
-    passwordStatus.letter &&
-    passwordStatus.number &&
-    passwordStatus.symbol &&
-    passwordStatus.noSpaces &&
-    passwordStatus.matches;
+  const canSubmit = form.code.length === 6 && isPasswordReady(passwordStatus);
 
   function updateField(key, value) {
-    setForm((current) => ({ ...current, [key]: value }));
+    const nextValue = key === 'code' ? value.replace(/\D/g, '').slice(0, 6) : value;
+    setForm((current) => ({ ...current, [key]: nextValue }));
   }
 
   function setFeedback(nextMessage, nextError = '') {
@@ -47,7 +42,7 @@ export default function VerificationPanel({
       setFeedback(
         result.verificationEmailSent
           ? 'Te reenviamos el codigo de un solo uso.'
-          : 'La cuenta sigue pendiente. No se pudo enviar el mail real.'
+          : 'No pudimos reenviar el codigo. Revisa SMTP, app password o el puerto 465.'
       );
     } catch (resendError) {
       setFeedback('', resendError.message);
@@ -63,7 +58,7 @@ export default function VerificationPanel({
       setFeedback('', 'Ingresa el codigo de un solo uso que recibiste por mail.');
       return;
     }
-    if (form.code.replace(/\D/g, '').length !== 6) {
+    if (form.code.length !== 6) {
       setFeedback('', 'El codigo debe tener 6 digitos.');
       return;
     }
@@ -132,11 +127,9 @@ export default function VerificationPanel({
         value={form.password}
       />
       <View style={styles.passwordRules}>
-        <PasswordRule checked={passwordStatus.length} label="Entre 8 y 72 caracteres" />
-        <PasswordRule checked={passwordStatus.letter} label="Al menos una letra" />
-        <PasswordRule checked={passwordStatus.number} label="Al menos un numero" />
-        <PasswordRule checked={passwordStatus.symbol} label="Al menos un simbolo" />
-        <PasswordRule checked={passwordStatus.noSpaces} label="Sin espacios" />
+        {passwordRuleCopy.map(([key, label]) => (
+          <PasswordRule checked={passwordStatus[key]} key={key} label={label} />
+        ))}
       </View>
       <Field
         label="Confirmar contrasena"
@@ -184,17 +177,6 @@ function PasswordRule({ checked, label }) {
       <Text style={[styles.passwordRuleText, checked && styles.passwordRuleTextOk]}>{label}</Text>
     </View>
   );
-}
-
-function getPasswordStatus(password = '', confirmPassword = '') {
-  return {
-    length: password.length >= 8 && password.length <= 72,
-    letter: /[A-Za-z]/.test(password),
-    number: /\d/.test(password),
-    symbol: /[^A-Za-z0-9]/.test(password),
-    noSpaces: password.length > 0 && !/\s/.test(password),
-    matches: password.length > 0 && password === confirmPassword
-  };
 }
 
 const styles = StyleSheet.create({

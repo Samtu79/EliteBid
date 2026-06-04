@@ -117,6 +117,7 @@ async function seedDatabase() {
      VALUES (?, ?, ?, ?, ?)`,
     [1, 32, 'si', 'platino', 2]
   );
+  await run("UPDATE clientes SET categoria = 'platino' WHERE identificador = ?", [1]);
   await run(
     `INSERT IGNORE INTO duenios (identificador, numero_pais, verificacion_financiera, verificacion_judicial, calificacion_riesgo, verificador)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -190,6 +191,58 @@ async function seedDatabase() {
     image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',
     product: 'Coupe clasico restaurado, matching numbers y dossier tecnico.',
     basePrice: 80000000,
+    currentBid: 0
+  });
+  await seedAuction({
+    id: 4,
+    title: 'Lote Numismatico Rio de la Plata',
+    date: '2026-06-04',
+    time: '18:30',
+    status: 'abierta',
+    category: 'comun',
+    location: 'Sala Federal, CABA',
+    image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
+    product: 'Conjunto de monedas argentinas y medallas con catalogacion basica.',
+    basePrice: 120000,
+    currentBid: 132000
+  });
+  await seedAuction({
+    id: 5,
+    title: 'Camara Leica M3 con Optica Summicron',
+    date: '2026-06-04',
+    time: '20:00',
+    status: 'abierta',
+    category: 'especial',
+    location: 'Galeria Central',
+    image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80',
+    product: 'Camara analogica Leica M3 revisada, con lente Summicron 50mm.',
+    basePrice: 780000,
+    currentBid: 842000
+  });
+  await seedAuction({
+    id: 6,
+    title: 'Juego de Te Ingles de 18 Piezas',
+    date: '2026-06-05',
+    time: '18:00',
+    status: 'abierta',
+    category: 'plata',
+    location: 'Salon Nocturne, Puerto Madero',
+    image: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=900&q=80',
+    product: 'Juego de te en porcelana inglesa con servicio completo de 18 piezas.',
+    basePrice: 1450000,
+    currentBid: 1610000
+  });
+  await seedAuction({
+    id: 7,
+    title: 'Coleccion Inicial de Diseno Argentino',
+    date: '2026-06-12',
+    time: '19:30',
+    status: 'programada',
+    category: 'comun',
+    location: 'Espacio Retiro',
+    image: 'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80',
+    product: 'Piezas de diseno argentino contemporaneo para nuevos postores.',
+    basePrice: 220000,
     currentBid: 0
   });
 

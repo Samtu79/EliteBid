@@ -27,7 +27,7 @@ export default function VerifyAccountScreen({ onContinueAsGuest, onVerified, use
               : 'No pudimos enviar el mail todavia. Revisa la configuracion SMTP o toca reenviar codigo.'}
           </Text>
           <View style={styles.mailPill}>
-            <MaterialCommunityIcons color={colors.primary} name="email-outline" size={16} />
+            <MaterialCommunityIcons color={colors.onPrimaryFixed} name="email-outline" size={16} />
             <Text style={styles.mailText}>{user.email}</Text>
           </View>
         </View>
@@ -100,8 +100,8 @@ const styles = StyleSheet.create({
   },
   mailPill: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceContainer,
-    borderColor: 'rgba(204, 193, 255, 0.2)',
+    backgroundColor: colors.primaryContainer,
+    borderColor: 'rgba(255, 255, 255, 0.24)',
     borderRadius: radii.full,
     borderWidth: 1,
     flexDirection: 'row',
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   mailText: {
-    color: colors.onSurface,
+    color: colors.onPrimaryFixed,
     flexShrink: 1,
     fontSize: 13,
     fontWeight: '800'

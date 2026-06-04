@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { resetPassword } from '../backend/authService';
 import ErrorDialog from '../components/ErrorDialog';
 import { colors, radii, shadows } from '../theme';
+import { getPasswordStatus, isPasswordReady, passwordRuleCopy } from '../utils/passwordRules';
 
 export default function ResetPasswordScreen({ onBack }) {
   const [identifier, setIdentifier] = useState('');
@@ -24,12 +25,8 @@ export default function ResetPasswordScreen({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [errorDialog, setErrorDialog] = useState('');
-
-  const rules = [
-    { label: 'Minimo 8 caracteres', valid: password.length >= 8 },
-    { label: 'Al menos un numero', valid: /\d/.test(password) },
-    { label: 'Al menos un simbolo', valid: /[^A-Za-z0-9]/.test(password) }
-  ];
+  const passwordStatus = useMemo(() => getPasswordStatus(password, confirmPassword), [password, confirmPassword]);
+  const canSubmit = Boolean(identifier.trim()) && isPasswordReady(passwordStatus);
 
   async function submit() {
     setErrorDialog('');
@@ -45,6 +42,10 @@ export default function ResetPasswordScreen({ onBack }) {
     }
     if (!confirmPassword.trim()) {
       setErrorDialog('Confirma tu nueva contrasena.');
+      return;
+    }
+    if (!isPasswordReady(passwordStatus)) {
+      setErrorDialog('Revisa los requisitos de la contrasena antes de actualizarla.');
       return;
     }
 
@@ -117,21 +118,31 @@ export default function ResetPasswordScreen({ onBack }) {
         />
 
         <View style={styles.rules}>
-          {rules.map((rule) => (
-            <View key={rule.label} style={styles.ruleRow}>
+          {passwordRuleCopy.map(([key, label]) => (
+            <View key={key} style={styles.ruleRow}>
               <MaterialCommunityIcons
-                color={rule.valid ? '#73E6A2' : colors.error}
-                name={rule.valid ? 'check-circle' : 'close-circle'}
+                color={passwordStatus[key] ? '#73E6A2' : colors.onSurfaceVariant}
+                name={passwordStatus[key] ? 'check-circle' : 'circle-outline'}
                 size={18}
               />
-              <Text style={[styles.rule, rule.valid && styles.ruleValid]}>{rule.label}</Text>
+              <Text style={[styles.rule, passwordStatus[key] && styles.ruleValid]}>{label}</Text>
             </View>
           ))}
+          {confirmPassword ? (
+            <View style={styles.ruleRow}>
+              <MaterialCommunityIcons
+                color={passwordStatus.matches ? '#73E6A2' : colors.onSurfaceVariant}
+                name={passwordStatus.matches ? 'check-circle' : 'circle-outline'}
+                size={18}
+              />
+              <Text style={[styles.rule, passwordStatus.matches && styles.ruleValid]}>Las contrasenas coinciden</Text>
+            </View>
+          ) : null}
         </View>
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
 
-        <Pressable disabled={loading} onPress={submit} style={styles.primaryButton}>
+        <Pressable disabled={loading} onPress={submit} style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}>
           <LinearGradient
             colors={[colors.primary, colors.primaryContainer]}
             end={{ x: 1, y: 1 }}
@@ -227,6 +238,9 @@ const styles = StyleSheet.create({
   primaryButton: {
     borderRadius: radii.full,
     overflow: 'hidden'
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5
   },
   primaryButtonFill: {
     alignItems: 'center',

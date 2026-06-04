@@ -34,9 +34,14 @@ export default function RegisterScreen({ onBack, onRegistered }) {
   const [loading, setLoading] = useState(false);
 
   function updateField(key, value) {
+    const nextValue = normalizeFieldValue(key, value, form.documentType);
+
     setForm((current) => ({
       ...current,
-      [key]: value,
+      [key]: nextValue,
+      ...(key === 'documentType'
+        ? { documentNumber: normalizeFieldValue('documentNumber', current.documentNumber, value) }
+        : {}),
       ...(key === 'documentType' && value === 'pasaporte' ? { documentBackUri: '' } : {})
     }));
   }
@@ -180,6 +185,15 @@ function PersonalStep({ form, pickDocument, updateField }) {
       </View>
 
       <Field
+        autoCapitalize="none"
+        inputStyle={styles.emailInput}
+        keyboardType="email-address"
+        label="Mail"
+        onChangeText={(value) => updateField('email', value)}
+        placeholder="tu@email.com"
+        value={form.email}
+      />
+      <Field
         label="Nombre"
         onChangeText={(value) => updateField('firstName', value)}
         placeholder="Ej. Juan Carlos"
@@ -190,14 +204,6 @@ function PersonalStep({ form, pickDocument, updateField }) {
         onChangeText={(value) => updateField('lastName', value)}
         placeholder="Ej. Perez"
         value={form.lastName}
-      />
-      <Field
-        autoCapitalize="none"
-        keyboardType="email-address"
-        label="Mail"
-        onChangeText={(value) => updateField('email', value)}
-        placeholder="tu@email.com"
-        value={form.email}
       />
 
       <Text style={styles.label}>Tipo de documento</Text>
@@ -215,7 +221,8 @@ function PersonalStep({ form, pickDocument, updateField }) {
       </View>
 
       <Field
-        keyboardType="numeric"
+        autoCapitalize={form.documentType === 'dni' ? 'none' : 'characters'}
+        keyboardType={form.documentType === 'dni' ? 'numeric' : 'default'}
         label={form.documentType === 'dni' ? 'DNI' : 'Pasaporte'}
         onChangeText={(value) => updateField('documentNumber', value)}
         placeholder={form.documentType === 'dni' ? 'Numero de DNI' : 'Numero de pasaporte'}
@@ -261,13 +268,13 @@ function Segment({ active, label, onPress }) {
   );
 }
 
-function Field({ label, style, ...props }) {
+function Field({ inputStyle, label, style, ...props }) {
   return (
     <View style={[styles.field, style]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         placeholderTextColor="rgba(201, 196, 211, 0.55)"
-        style={styles.input}
+        style={[styles.input, inputStyle]}
         {...props}
       />
     </View>
@@ -282,6 +289,20 @@ function DocumentButton({ done, icon, label, onPress }) {
       <Text style={styles.documentAction}>{done ? 'Cargado' : 'Subir foto'}</Text>
     </Pressable>
   );
+}
+
+function normalizeFieldValue(key, value, documentType) {
+  if (key === 'email') {
+    return value.trim().toLowerCase();
+  }
+
+  if (key === 'documentNumber') {
+    return documentType === 'dni'
+      ? value.replace(/\D/g, '').slice(0, 8)
+      : value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
+  }
+
+  return value;
 }
 
 const styles = StyleSheet.create({
@@ -327,6 +348,10 @@ const styles = StyleSheet.create({
   documentSection: {
     gap: 14,
     marginBottom: 16
+  },
+  emailInput: {
+    backgroundColor: 'rgba(177, 161, 255, 0.18)',
+    borderBottomColor: 'rgba(204, 193, 255, 0.72)'
   },
   field: {
     flex: 1,
