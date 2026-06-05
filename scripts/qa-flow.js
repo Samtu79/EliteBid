@@ -18,6 +18,7 @@ const PORT = Number(process.env.QA_API_PORT || 3999);
 const BASE_URL = `http://127.0.0.1:${PORT}/api`;
 const RUN_ID = Date.now();
 const PASSWORD = 'QaFlow!2203';
+const RESET_PASSWORD = 'QaFlow!3304';
 const OTP = '654321';
 
 let server;
@@ -126,8 +127,9 @@ async function verifyGuest(db, guest) {
 
 async function cleanup(db, touched = {}) {
   if (touched.itemId && touched.previousBid != null) {
-    await db.query('UPDATE items_catalogo SET puja_actual = ? WHERE identificador = ?', [
+    await db.query('UPDATE items_catalogo SET puja_actual = ?, subastado = COALESCE(?, subastado) WHERE identificador = ?', [
       touched.previousBid,
+      touched.previousSubastado ?? null,
       touched.itemId
     ]);
   }
@@ -138,11 +140,16 @@ async function cleanup(db, touched = {}) {
 
   for (const row of rows) {
     await db.query(
+      'DELETE fl FROM fotos_lote fl JOIN solicitudes_lotes sl ON sl.identificador = fl.solicitud WHERE sl.cliente = ?',
+      [row.clienteId]
+    );
+    await db.query('DELETE FROM solicitudes_lotes WHERE cliente = ?', [row.clienteId]);
+    await db.query('DELETE FROM registro_de_subasta WHERE cliente = ?', [row.clienteId]);
+    await db.query(
       'DELETE p FROM pujos p JOIN asistentes a ON a.identificador = p.asistente WHERE a.cliente = ?',
       [row.clienteId]
     );
     await db.query('DELETE FROM favoritos WHERE cliente = ?', [row.clienteId]);
-    await db.query('DELETE FROM solicitudes_lotes WHERE cliente = ?', [row.clienteId]);
     await db.query('DELETE FROM asistentes WHERE cliente = ?', [row.clienteId]);
     await db.query('DELETE FROM medios_pago WHERE cliente = ?', [row.clienteId]);
     await db.query('DELETE FROM sesiones WHERE usuario_id = ?', [row.id]);
@@ -151,6 +158,27 @@ async function cleanup(db, touched = {}) {
     await db.query('DELETE FROM clientes WHERE identificador = ?', [row.clienteId]);
     await db.query('DELETE FROM personas WHERE identificador = ?', [row.clienteId]);
   }
+}
+
+function validLotPayload() {
+  return {
+    title: 'Lote QA Robustez',
+    lotKind: 'unico',
+    itemType: 'Antiguedad',
+    quantity: 1,
+    estimatedValue: 900000,
+    composition: '',
+    description: 'Lote de prueba automatizada para validar carga de ventas.',
+    condition: 'Muy buen estado general, con marcas leves de uso.',
+    history: 'Pieza familiar con historia documentada.',
+    legalOrigin: 'Factura y declaracion jurada disponibles.',
+    payoutBank: 'Banco QA',
+    payoutAccountHolder: 'Qa Robustez',
+    payoutReference: 'qa.robustez',
+    ownershipDeclaration: true,
+    returnChargeAccepted: true,
+    photoUris: Array.from({ length: 6 }, (_, index) => `file:///qa/lote-${index + 1}.jpg`)
+  };
 }
 
 async function main() {
@@ -212,7 +240,7 @@ async function main() {
     logOk('reenvio de OTP sin sesion');
 
     const userA = await verifyGuest(db, await registerGuest(db, 2));
-    const userB = await verifyGuest(db, await registerGuest(db, 3));
+    let userB = await verifyGuest(db, await registerGuest(db, 3));
     logOk('verificacion de dos cuentas cliente');
 
     const publicCatalog = await request(`/auctions?clienteId=${userA.clienteId}`);
@@ -225,6 +253,34 @@ async function main() {
       request(`/users/${userA.clienteId}/profile`), 'sesion');
     await expectReject('sesion ajena no opera otra cuenta', () =>
       request(`/users/${userA.clienteId}/payments`, { token: userB.sessionToken }), 'permisos');
+
+    await expectReject('reset con clave debil rechazado', () =>
+      request('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          identifier: userB.email,
+          password: 'simple',
+          confirmPassword: 'simple'
+        })
+      }), 'clave');
+    await request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        identifier: userB.email,
+        password: RESET_PASSWORD,
+        confirmPassword: RESET_PASSWORD
+      })
+    });
+    await expectReject('login con clave anterior rechazado tras reset', () =>
+      request('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: userB.email, password: PASSWORD })
+      }), 'incorrectos');
+    userB = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: userB.email, password: RESET_PASSWORD })
+    });
+    logOk('reset password invalida sesiones y acepta clave nueva');
 
     await expectReject('pago invalido rechazado', () =>
       request(`/users/${userA.clienteId}/payments`, {
@@ -254,6 +310,33 @@ async function main() {
     });
     logOk('pago valido agregado');
 
+    const notifications = await request('/notificaciones', { token: userA.sessionToken });
+    if (!Array.isArray(notifications) || notifications.length === 0) {
+      throw new Error('Las notificaciones no devolvieron datos');
+    }
+    const action = await request(`/notificaciones/${notifications[0].id}/accion`, {
+      method: 'POST',
+      token: userA.sessionToken
+    });
+    if (!action.ok || !action.target) throw new Error('La accion de notificacion no devolvio target');
+    logOk('notificaciones accionables');
+
+    await expectReject('lote sin fotos suficientes rechazado', () =>
+      request(`/users/${userA.clienteId}/lots`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({ ...validLotPayload(), photoUris: [] })
+      }), 'fotos');
+    const lots = await request(`/users/${userA.clienteId}/lots`, {
+      method: 'POST',
+      token: userA.sessionToken,
+      body: JSON.stringify(validLotPayload())
+    });
+    if (!Array.isArray(lots) || !lots.some((lot) => lot.title === 'Lote QA Robustez')) {
+      throw new Error('El lote valido no quedo guardado');
+    }
+    logOk('lote valido queda pendiente');
+
     const auctions = await request(`/auctions?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
     const activeCommon = auctions.find((auction) => auction.status === 'abierta' && auction.category === 'comun');
     if (!activeCommon) throw new Error('No hay subasta comun abierta para QA');
@@ -277,6 +360,8 @@ async function main() {
     });
     touched.itemId = room.itemId;
     touched.previousBid = activeCommon.currentBid;
+    const [itemRows] = await db.query('SELECT subastado FROM items_catalogo WHERE identificador = ?', [room.itemId]);
+    touched.previousSubastado = itemRows[0]?.subastado;
     logOk('entrada valida a sala');
 
     await expectReject('puja baja rechazada', () =>
@@ -294,6 +379,20 @@ async function main() {
     });
     if (Number(bid.auction.currentBid) !== validAmount) throw new Error('La puja valida no actualizo la subasta');
     logOk('puja valida actualiza subasta');
+
+    const purchases = await request(`/users/${userA.clienteId}/purchases`, { token: userA.sessionToken });
+    const pendingPurchase = purchases.find((purchase) => Number(purchase.id) === Number(bid.bid.id));
+    if (!pendingPurchase || pendingPurchase.paymentStatus !== 'pendiente') {
+      throw new Error('La puja ganadora no aparecio como compra pendiente');
+    }
+    const settled = await request(`/users/${userA.clienteId}/purchases/${bid.bid.id}/settle`, {
+      method: 'POST',
+      token: userA.sessionToken
+    });
+    if (!settled.some((purchase) => Number(purchase.id) === Number(bid.bid.id) && purchase.paymentStatus === 'pagada')) {
+      throw new Error('La compra no quedo pagada');
+    }
+    logOk('compra ganadora se registra como pagada');
   } finally {
     await cleanup(db, touched);
     await db.end();
