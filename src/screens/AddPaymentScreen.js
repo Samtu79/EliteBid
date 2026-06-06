@@ -208,7 +208,8 @@ function CardForm({ form, updateField }) {
       <Field
         keyboardType="numeric"
         label="Numero de tarjeta"
-        onChangeText={(value) => updateField('cardNumber', value)}
+        maxLength={19}
+        onChangeText={(value) => updateField('cardNumber', formatCardNumber(value))}
         placeholder="0000 0000 0000 0000"
         value={form.cardNumber}
       />
@@ -230,7 +231,8 @@ function CardForm({ form, updateField }) {
         <Field
           keyboardType="numeric"
           label="CVV"
-          onChangeText={(value) => updateField('cvv', value)}
+          maxLength={4}
+          onChangeText={(value) => updateField('cvv', onlyDigits(value).slice(0, 4))}
           placeholder="123"
           secureTextEntry
           value={form.cvv}
@@ -258,7 +260,8 @@ function BankForm({ form, updateField }) {
       <Field
         keyboardType="numeric"
         label="CBU / CVU"
-        onChangeText={(value) => updateField('cbu', value)}
+        maxLength={22}
+        onChangeText={(value) => updateField('cbu', onlyDigits(value).slice(0, 22))}
         placeholder="22 digitos"
         value={form.cbu}
       />
@@ -285,13 +288,15 @@ function CheckForm({ form, pickCheckImage, updateField }) {
       <Field
         keyboardType="numeric"
         label="Numero de cheque"
-        onChangeText={(value) => updateField('checkNumber', value)}
+        onChangeText={(value) => updateField('checkNumber', onlyDigits(value).slice(0, 20))}
         placeholder="0000 0000 0000"
         value={form.checkNumber}
       />
       <Field
+        keyboardType="numeric"
         label="Fecha de emision"
-        onChangeText={(value) => updateField('issueDate', value)}
+        maxLength={10}
+        onChangeText={(value) => updateField('issueDate', formatIssueDate(value))}
         placeholder="DD/MM/AAAA"
         value={form.issueDate}
       />
@@ -321,7 +326,7 @@ function Field({ label, style, ...props }) {
 
 function getSaveLabel(type) {
   if (type === 'cuenta') return 'Guardar cuenta';
-  if (type === 'cheque') return 'Solicitar validacion';
+  if (type === 'cheque') return 'Guardar cheque';
   return 'Guardar tarjeta';
 }
 
@@ -330,14 +335,36 @@ function maskCard(value) {
   return digits.replace(/(.{4})/g, '$1 ').trim();
 }
 
+function onlyDigits(value) {
+  return String(value).replace(/\D/g, '');
+}
+
+function formatCardNumber(value) {
+  const digits = onlyDigits(value).slice(0, 16);
+  return digits.replace(/(.{4})/g, '$1 ').trim();
+}
+
 function formatExpiry(value) {
-  const digits = String(value).replace(/\D/g, '').slice(0, 4);
+  const digits = onlyDigits(value).slice(0, 4);
 
   if (digits.length <= 2) {
     return digits;
   }
 
   return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
+function formatIssueDate(value) {
+  const digits = onlyDigits(value).slice(0, 8);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
 const styles = StyleSheet.create({

@@ -31,10 +31,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const [payments, setPayments] = useState([]);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
-  const [placedBidInRoom, setPlacedBidInRoom] = useState(false);
   const [toast, setToast] = useState(null);
   const leadingActive = Boolean(
-    placedBidInRoom &&
     auction?.closure?.winner?.isCurrentUser &&
       auction?.closureStatus === 'en_cuenta' &&
       auction?.status !== 'cerrada' &&
@@ -46,6 +44,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
     setAuction(detail);
     setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
+    syncAmountWithAuction(detail);
     setLoading(false);
   }
 
@@ -99,6 +98,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         const detail = await getAuctionDetail(auctionId, user.clienteId);
         setAuction(detail);
         setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
+        syncAmountWithAuction(detail);
       } catch (pollError) {
         setError(pollError.message);
       }
@@ -184,7 +184,6 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
 
       setAuction(result.auction);
-      setPlacedBidInRoom(true);
       setSecondsRemaining(Number(result.auction.closure?.secondsRemaining ?? result.auction.timerSecondsRemaining ?? 0));
       setAmount(formatInputAmount(getSuggestedBid(result.auction)));
       setMessage('Puja confirmada. El contador volvio a 1 minuto.');
@@ -195,6 +194,35 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       setToast({ message: bidError.message, tone: 'danger' });
     } finally {
       setSending(false);
+    }
+  }
+
+  function showLeadingLock() {
+    setToast({
+      message: 'Vas primero en esta subasta. No podes salir hasta que termine o superen tu puja.',
+      tone: 'danger'
+    });
+  }
+
+  function guardRoomExit(callback) {
+    if (leadingActive) {
+      showLeadingLock();
+      return;
+    }
+
+    callback?.();
+  }
+
+  function syncAmountWithAuction(detail) {
+    const currentUserLeads = Boolean(
+      detail?.closure?.winner?.isCurrentUser &&
+        detail?.closureStatus === 'en_cuenta' &&
+        detail?.status !== 'cerrada' &&
+        Number(detail?.closure?.secondsRemaining ?? detail?.timerSecondsRemaining ?? 0) > 0
+    );
+
+    if (!currentUserLeads) {
+      setAmount(formatInputAmount(getSuggestedBid(detail)));
     }
   }
 
@@ -468,22 +496,6 @@ function getClosureCopy(auction) {
 function getFinalResultText(auction) {
   if (auction.closure?.reason === 'compra_empresa_sin_pujas') {
     return `Nadie mejoro la oferta. La empresa compra el lote por el valor base de ${formatMoney(auction.basePrice)}.`;
-  }
-
-  function showLeadingLock() {
-    setToast({
-      message: 'Vas primero en esta subasta. No podes salir hasta que termine o superen tu puja.',
-      tone: 'danger'
-    });
-  }
-
-  function guardRoomExit(callback) {
-    if (leadingActive) {
-      showLeadingLock();
-      return;
-    }
-
-    callback?.();
   }
   if (auction.closure?.winner?.isCurrentUser) {
     const amount = auction.closure.winner.amount;

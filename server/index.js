@@ -519,7 +519,7 @@ app.post('/api/usuarios/me/medios-de-pago', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para agregar medios de pago.');
   const payment = sanitizePayment(fromLegacyPaymentInput(req.body));
-  const verified = payment.type === 'cheque' ? 'no' : 'si';
+  const verified = 'si';
   await run(
     `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -825,7 +825,7 @@ app.post('/api/users/:clienteId/payments', wrap(async (req, res) => {
   const viewer = await requireMatchingClient(req, req.params.clienteId);
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para agregar medios de pago.');
   const payment = sanitizePayment(req.body);
-  const verified = payment.type === 'cheque' ? 'no' : 'si';
+  const verified = 'si';
   await run(
     `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -2047,7 +2047,7 @@ function sanitizePayment(payload) {
     sanitized.expiry = normalizeExpiry(sanitized.expiry);
     sanitized.cvv = onlyDigits(sanitized.cvv);
 
-    if (sanitized.cardNumber.length < 13 || sanitized.cardNumber.length > 19) {
+    if (sanitized.cardNumber.length < 13 || sanitized.cardNumber.length > 16) {
       throw new Error('Ingresa un numero de tarjeta valido.');
     }
     if (!/^\d{3,4}$/.test(sanitized.cvv)) {
@@ -2466,7 +2466,7 @@ function normalizeDate(value = '', message = 'Ingresa una fecha valida.') {
     throw new Error(message);
   }
 
-  return normalizedText;
+  return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
 function sanitizeUri(value = '', message = 'Ingresa una ruta valida.') {
