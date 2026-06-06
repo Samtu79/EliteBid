@@ -492,6 +492,48 @@ async function runAuthRegistrationMatrix(db) {
     throw new Error('Login con clave reseteada no funciono');
   }
   logOk('auth 45 reset permite login con clave nueva');
+
+  const documentLogin = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ documentNumber: '12.345.675', password: RESET_PASSWORD })
+  });
+  if (documentLogin.rol !== 'cliente' || documentLogin.estado !== 'activo') {
+    throw new Error('Login por documento no funciono');
+  }
+  logOk('auth 46 login por documento compatible con pdf');
+
+  const sessionState = await request('/auth/estado', { token: documentLogin.sessionToken });
+  if (!sessionState || sessionState.rol !== 'cliente') {
+    throw new Error('/auth/estado no devolvio sesion activa');
+  }
+  logOk('auth 47 estado de sesion compatible con pdf');
+
+  const phaseOne = await request('/auth/registro/fase1', {
+    method: 'POST',
+    body: JSON.stringify(guestRegistrationPayload(121, {
+      email: `qa.robust.${RUN_ID}.fase1@example.com`,
+      nombre: 'lucia',
+      apellido: 'fase',
+      tipoDocumento: 'dni',
+      dni: '77.654.321',
+      documentos: ['file:///qa/document-front.jpg', 'file:///qa/document-back.jpg']
+    }))
+  });
+  if (!phaseOne.registrationId || phaseOne.estado !== 'pendiente') {
+    throw new Error('Registro fase1 PDF no devolvio estado pendiente');
+  }
+  const phaseTwo = await request('/auth/registro/fase2', {
+    method: 'POST',
+    body: JSON.stringify({
+      registrationId: phaseOne.registrationId,
+      password: PASSWORD,
+      confirmPassword: PASSWORD
+    })
+  });
+  if (phaseTwo.rol !== 'cliente' || phaseTwo.estado !== 'activo') {
+    throw new Error('Registro fase2 PDF no activo cliente');
+  }
+  logOk('auth 48 registro fase1/fase2 compatible con pdf');
 }
 
 async function cleanup(db, touched = {}) {
@@ -673,6 +715,29 @@ async function main() {
     });
     logOk('reset password invalida sesiones y acepta clave nueva');
 
+    const pdfProfile = await request('/usuarios/me', { token: userA.sessionToken });
+    if (!pdfProfile.email || pdfProfile.categoria == null) throw new Error('/usuarios/me no devolvio perfil legacy');
+    logOk('pdf usuarios/me devuelve perfil');
+
+    const pdfProfileUpdate = await request('/usuarios/me', {
+      method: 'PUT',
+      token: userA.sessionToken,
+      body: JSON.stringify({
+        email: userA.email,
+        direccion: 'Av Siempre Viva 742'
+      })
+    });
+    if (!pdfProfileUpdate.email) throw new Error('PUT /usuarios/me no devolvio perfil actualizado');
+    logOk('pdf usuarios/me permite actualizar datos editables');
+
+    const pdfStats = await request('/usuarios/me/estadisticas', { token: userA.sessionToken });
+    if (pdfStats.currentCategory == null) throw new Error('/usuarios/me/estadisticas no devolvio categoria');
+    logOk('pdf estadisticas compatible');
+
+    const pdfActivity = await request('/usuarios/me/actividad-reciente', { token: userA.sessionToken });
+    if (!Array.isArray(pdfActivity)) throw new Error('/usuarios/me/actividad-reciente no devolvio lista');
+    logOk('pdf actividad reciente compatible');
+
     await expectReject('pago invalido rechazado', () =>
       request(`/users/${userA.clienteId}/payments`, {
         method: 'POST',
@@ -743,6 +808,14 @@ async function main() {
       throw new Error('El cheque valido no quedo verificado');
     }
     logOk('cheque valido queda verificado');
+    const pdfPayments = await request('/usuarios/me/medios-de-pago', { token: userA.sessionToken });
+    if (!Array.isArray(pdfPayments) || pdfPayments.length < 2) throw new Error('/usuarios/me/medios-de-pago no listo pagos');
+    await request(`/usuarios/me/medios-de-pago/${pdfPayments[0].id}`, {
+      method: 'PATCH',
+      token: userA.sessionToken,
+      body: JSON.stringify({ verificado: true })
+    });
+    logOk('pdf patch medio de pago compatible');
     await request(`/users/${userB.clienteId}/payments`, {
       method: 'POST',
       token: userB.sessionToken,
@@ -767,6 +840,9 @@ async function main() {
     });
     if (!action.ok || !action.target) throw new Error('La accion de notificacion no devolvio target');
     logOk('notificaciones accionables');
+    await request(`/notificaciones/${notifications[0].id}/leer`, { method: 'PATCH', token: userA.sessionToken });
+    await request('/notificaciones/leer-todas', { method: 'PATCH', token: userA.sessionToken });
+    logOk('pdf notificaciones leidas compatible');
 
     await expectReject('lote sin fotos suficientes rechazado', () =>
       request(`/users/${userA.clienteId}/lots`, {
@@ -783,6 +859,20 @@ async function main() {
       throw new Error('El lote valido no quedo guardado');
     }
     logOk('lote valido queda pendiente');
+    const createdLot = lots.find((lot) => lot.title === 'Lote QA Robustez');
+    const pdfSaleDetail = await request(`/solicitudes-venta/${createdLot.id}`, { token: userA.sessionToken });
+    if (String(pdfSaleDetail.id) !== String(createdLot.id)) throw new Error('/solicitudes-venta/{id} no devolvio detalle');
+    await request(`/solicitudes-venta/${createdLot.id}/aceptar-condiciones`, { method: 'POST', token: userA.sessionToken });
+    const pdfGoods = await request('/mis-bienes', { token: userA.sessionToken });
+    if (!Array.isArray(pdfGoods)) throw new Error('/mis-bienes no devolvio lista');
+    await request(`/mis-bienes/${createdLot.id}/seguro`, { token: userA.sessionToken });
+    await request(`/mis-bienes/${createdLot.id}/ubicacion`, { token: userA.sessionToken });
+    await request(`/solicitudes-venta/${createdLot.id}/rechazar-condiciones`, {
+      method: 'POST',
+      token: userA.sessionToken,
+      body: JSON.stringify({ motivo: 'QA rechazo condiciones' })
+    });
+    logOk('pdf solicitudes venta y mis bienes compatibles');
 
     const auctions = await request(`/auctions?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
     const activeCommon = auctions.find((auction) => auction.status === 'abierta' && auction.category === 'comun');
@@ -805,6 +895,11 @@ async function main() {
       token: userA.sessionToken,
       body: JSON.stringify({ clienteId: userA.clienteId })
     });
+    const pdfRoom = await request(`/subastas/${activeCommon.id}/ingresar`, {
+      method: 'POST',
+      token: userA.sessionToken
+    });
+    if (Number(pdfRoom.id) !== Number(activeCommon.id)) throw new Error('/subastas/{id}/ingresar no devolvio sala');
     touched.itemId = room.itemId;
     touched.auctionId = activeCommon.id;
     touched.previousBid = activeCommon.currentBid;
@@ -813,6 +908,20 @@ async function main() {
     const [auctionRows] = await db.query('SELECT estado FROM subastas WHERE identificador = ?', [activeCommon.id]);
     touched.previousAuctionStatus = auctionRows[0]?.estado;
     logOk('entrada valida a sala');
+    const pdfCatalog = await request(`/subastas/${activeCommon.id}/catalogo`, { token: userA.sessionToken });
+    if (!Array.isArray(pdfCatalog.catalogo) || !pdfCatalog.catalogo.length) throw new Error('/subastas/{id}/catalogo no devolvio items');
+    const pdfCatalogItem = await request(`/subastas/${activeCommon.id}/catalogo/${room.itemId}`, { token: userA.sessionToken });
+    if (String(pdfCatalogItem.id) !== String(room.itemId)) throw new Error('/subastas/{id}/catalogo/{itemId} no devolvio item');
+    await request(`/subastas/${activeCommon.id}/salir`, { method: 'POST', token: userA.sessionToken });
+    logOk('pdf catalogo sala y salida compatibles');
+
+    await request(`/usuarios/me/favoritos/${room.itemId}`, { method: 'POST', token: userA.sessionToken });
+    const pdfFavorites = await request('/usuarios/me/favoritos', { token: userA.sessionToken });
+    if (!Array.isArray(pdfFavorites) || !pdfFavorites.some((auction) => Number(auction.id) === Number(activeCommon.id))) {
+      throw new Error('/usuarios/me/favoritos no guardo favorito');
+    }
+    await request(`/usuarios/me/favoritos/${room.itemId}`, { method: 'DELETE', token: userA.sessionToken });
+    logOk('pdf favoritos compatible');
 
     await expectReject('puja baja rechazada', () =>
       request(`/auctions/${activeCommon.id}/bids`, {
@@ -829,6 +938,13 @@ async function main() {
     });
     if (Number(bid.auction.currentBid) !== validAmount) throw new Error('La puja valida no actualizo la subasta');
     logOk('puja valida actualiza subasta');
+    const pdfBids = await request(`/subastas/${activeCommon.id}/items/${room.itemId}/pujas`, { token: userA.sessionToken });
+    if (!Array.isArray(pdfBids) || !pdfBids.length) throw new Error('/subastas/{id}/items/{itemId}/pujas no devolvio historial');
+    const pdfMyBids = await request('/usuarios/me/pujas', { token: userA.sessionToken });
+    if (!Array.isArray(pdfMyBids) || !pdfMyBids.some((item) => Number(item.id) === Number(bid.bid.id))) {
+      throw new Error('/usuarios/me/pujas no devolvio historial propio');
+    }
+    logOk('pdf historial de pujas compatible');
 
     await expectReject('lider activo no puede ofertar otra vez', () =>
       request(`/auctions/${activeCommon.id}/bids`, {
@@ -841,12 +957,12 @@ async function main() {
       }), 'vas primero');
 
     const rivalAmount = validAmount + Math.ceil(Number(activeCommon.basePrice) * 0.02);
-    const rivalBid = await request(`/auctions/${activeCommon.id}/bids`, {
+    const rivalBid = await request(`/subastas/${activeCommon.id}/items/${room.itemId}/pujar`, {
       method: 'POST',
       token: userB.sessionToken,
-      body: JSON.stringify({ clienteId: userB.clienteId, amount: rivalAmount })
+      body: JSON.stringify({ importe: rivalAmount })
     });
-    if (Number(rivalBid.auction.currentBid) !== rivalAmount) {
+    if (Number(rivalBid.lote.pujaActual) !== rivalAmount) {
       throw new Error('La puja rival no actualizo la subasta');
     }
     logOk('versus usuario B supera a usuario A');
@@ -886,14 +1002,22 @@ async function main() {
     if (!pendingPurchase || pendingPurchase.paymentStatus !== 'pendiente') {
       throw new Error('La puja ganadora no aparecio como compra pendiente');
     }
-    const settled = await request(`/users/${userA.clienteId}/purchases/${comebackBid.bid.id}/settle`, {
+    const settled = await request(`/usuarios/me/compras/${comebackBid.bid.id}/confirmar-pago`, {
       method: 'POST',
-      token: userA.sessionToken
+      token: userA.sessionToken,
+      body: JSON.stringify({ direccionEnvio: 'Av Demo 1234' })
     });
     if (!settled.some((purchase) => Number(purchase.id) === Number(comebackBid.bid.id) && purchase.paymentStatus === 'pagada')) {
       throw new Error('La compra no quedo pagada');
     }
+    const pdfPurchaseDetail = await request(`/usuarios/me/compras/${comebackBid.bid.id}`, { token: userA.sessionToken });
+    if (Number(pdfPurchaseDetail.id) !== Number(comebackBid.bid.id)) throw new Error('/usuarios/me/compras/{id} no devolvio detalle');
+    await request(`/usuarios/me/compras/${comebackBid.bid.id}/tracking`, { token: userA.sessionToken });
     logOk('compra ganadora se registra como pagada');
+
+    const pdfAccountState = await request('/usuarios/me/estado-cuenta', { token: userA.sessionToken });
+    if (!pdfAccountState.estado) throw new Error('/usuarios/me/estado-cuenta no devolvio estado');
+    logOk('pdf estado cuenta compatible');
   } finally {
     await cleanup(db, touched);
     await db.end();

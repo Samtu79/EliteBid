@@ -70,9 +70,11 @@ app.get('/api/health', async (_req, res, next) => {
 
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { email = '', password = '' } = req.body;
-  const normalizedEmail = normalizeEmail(email);
+  const rawIdentifier = req.body.identifier ?? req.body.documentNumber ?? req.body.dni ?? email;
+  const normalizedEmail = normalizeEmail(rawIdentifier);
+  const documentNumber = normalizedEmail ? '' : onlyDigits(rawIdentifier);
 
-  if (!normalizedEmail || !password) throw new Error('Completa tu correo y clave para ingresar.');
+  if ((!normalizedEmail && !documentNumber) || !password) throw new Error('Completa tu correo y clave para ingresar.');
 
   const user = await first(
     `SELECT u.id, u.email, u.password, u.nombre, u.rol, u.estado, u.cliente_id AS clienteId,
@@ -82,8 +84,9 @@ app.post('/api/auth/login', wrap(async (req, res) => {
       (SELECT COUNT(*) FROM medios_pago mp WHERE mp.cliente = u.cliente_id) AS paymentCount
      FROM usuarios u
      JOIN clientes c ON c.identificador = u.cliente_id
-     WHERE lower(u.email) = ?`,
-    [normalizedEmail]
+     JOIN personas p ON p.identificador = u.cliente_id
+     WHERE ${normalizedEmail ? 'lower(u.email) = ?' : 'p.documento = ?'}`,
+    [normalizedEmail || documentNumber]
   );
 
   if (!user) throw new Error('Correo o clave incorrectos.');
@@ -222,7 +225,7 @@ app.post('/api/auth/register-guest', wrap(async (req, res) => {
   });
 }));
 
-app.post('/api/auth/register/paso1', wrap(async (req, res) => {
+app.post(['/api/auth/register/paso1', '/api/auth/registro/fase1'], wrap(async (req, res) => {
   const form = sanitizeGuestRegistration(fromLegacyRegistrationInput(req.body));
 
   const existing = await first('SELECT id FROM usuarios WHERE lower(email) = ?', [form.email]);
@@ -280,7 +283,7 @@ app.post('/api/auth/register/paso1', wrap(async (req, res) => {
   });
 }));
 
-app.post('/api/auth/register/paso2', wrap(async (req, res) => {
+app.post(['/api/auth/register/paso2', '/api/auth/registro/fase2'], wrap(async (req, res) => {
   const registrationId = parsePositiveInt(req.body.registrationId, 'Registro previo inexistente.');
   validatePassword(req.body.password, req.body.confirmPassword);
   const user = await first(
@@ -445,7 +448,7 @@ app.get('/api/auth/verify-email', wrap(async (req, res) => {
   sendVerificationHtml(res, 200, 'Cuenta verificada', 'Tu cuenta ya esta verificada. Volve a EliteBid para agregar tu medio de pago.');
 }));
 
-app.get('/api/auth/session', wrap(async (req, res) => {
+app.get(['/api/auth/session', '/api/auth/estado'], wrap(async (req, res) => {
   const token = bearerToken(req);
   if (!token) return res.json(null);
 
@@ -511,6 +514,32 @@ app.get('/api/usuarios/me', wrap(async (req, res) => {
   res.json(toLegacyUser(profile, viewer));
 }));
 
+app.put('/api/usuarios/me', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para modificar tus datos.');
+  const currentProfile = await getUserProfile(viewer.clienteId);
+  const profile = sanitizeProfile({
+    ...req.body,
+    userId: currentProfile.userId,
+    firstName: req.body.firstName ?? req.body.nombre ?? currentProfile.identityFirstName,
+    lastName: req.body.lastName ?? req.body.apellido ?? currentProfile.identityLastName,
+    documento: req.body.documento ?? currentProfile.documento,
+    email: req.body.email ?? currentProfile.email,
+    legalAddress: req.body.legalAddress ?? req.body.domicilioLegal ?? req.body.direccion ?? currentProfile.legalAddress
+  });
+  await assertImmutableIdentity(viewer.clienteId, profile);
+
+  const duplicate = await first('SELECT id FROM usuarios WHERE lower(email) = ? AND id <> ?', [
+    profile.email,
+    profile.userId
+  ]);
+  if (duplicate) throw new Error('Ese correo ya esta usado por otro usuario.');
+
+  await run('UPDATE personas SET direccion = ? WHERE identificador = ?', [profile.legalAddress, viewer.clienteId]);
+  await run('UPDATE usuarios SET email = ? WHERE id = ?', [profile.email, profile.userId]);
+  res.json(toLegacyUser(await getUserProfile(viewer.clienteId), viewer));
+}));
+
 app.get('/api/usuarios/me/medios-de-pago', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   res.json(await getUserPayments(viewer.clienteId));
@@ -530,9 +559,66 @@ app.post('/api/usuarios/me/medios-de-pago', wrap(async (req, res) => {
   res.status(201).json(await getUserPayments(viewer.clienteId));
 }));
 
+app.patch('/api/usuarios/me/medios-de-pago/:paymentId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para modificar medios de pago.');
+  const paymentId = parsePositiveInt(req.params.paymentId, 'Medio de pago invalido.');
+  const payment = await first(
+    'SELECT identificador AS id FROM medios_pago WHERE identificador = ? AND cliente = ? LIMIT 1',
+    [paymentId, viewer.clienteId]
+  );
+  if (!payment) throw new Error('No encontramos ese medio de pago.');
+
+  if (req.body.verificado != null || req.body.verified != null) {
+    const verified = toBoolean(req.body.verificado ?? req.body.verified) ? 'si' : 'no';
+    await run('UPDATE medios_pago SET verificado = ? WHERE identificador = ? AND cliente = ?', [
+      verified,
+      paymentId,
+      viewer.clienteId
+    ]);
+    await refreshClientCategory(viewer.clienteId);
+  }
+
+  res.json(await getUserPayments(viewer.clienteId));
+}));
+
 app.get('/api/usuarios/me/compras', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   res.json(await getUserPurchases(viewer.clienteId));
+}));
+
+app.get('/api/usuarios/me/compras/:bidId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const bidId = parsePositiveInt(req.params.bidId, 'Compra invalida.');
+  const purchases = await getUserPurchases(viewer.clienteId);
+  const purchase = purchases.find((item) => Number(item.id) === bidId);
+  if (!purchase) throw new Error('No encontramos esa compra.');
+  res.json(purchase);
+}));
+
+app.post('/api/usuarios/me/compras/:bidId/confirmar-pago', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const bidId = parsePositiveInt(req.params.bidId, 'Compra invalida.');
+  await settlePurchase(viewer.clienteId, bidId);
+  if (req.body.direccionEnvio || req.body.deliveryAddress) {
+    await savePurchaseDelivery(viewer.clienteId, bidId, req.body.direccionEnvio ?? req.body.deliveryAddress);
+  }
+  res.json(await getUserPurchases(viewer.clienteId));
+}));
+
+app.get('/api/usuarios/me/compras/:bidId/tracking', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const bidId = parsePositiveInt(req.params.bidId, 'Compra invalida.');
+  const purchases = await getUserPurchases(viewer.clienteId);
+  const purchase = purchases.find((item) => Number(item.id) === bidId);
+  if (!purchase) throw new Error('No encontramos esa compra.');
+  res.json({
+    compraId: bidId,
+    estado: purchase.deliveryAddress ? 'preparando_envio' : 'pendiente_direccion',
+    ubicacionEstimada: purchase.deliveryAddress ? 'Deposito EliteBid' : null,
+    fechaEstimadaEntrega: null,
+    direccionEnvio: purchase.deliveryAddress ?? null
+  });
 }));
 
 app.get('/api/usuarios/me/penalidades', wrap(async (req, res) => {
@@ -540,9 +626,61 @@ app.get('/api/usuarios/me/penalidades', wrap(async (req, res) => {
   res.json(await getUserPenalties(viewer.clienteId));
 }));
 
+app.get('/api/usuarios/me/estado-cuenta', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const penalties = await getUserPenalties(viewer.clienteId);
+  const active = penalties.filter((penalty) => ['activa', 'vencida'].includes(penalty.status));
+  res.json({
+    estado: active.length ? 'restringida' : 'activa',
+    penalidadesActivas: active.length
+  });
+}));
+
+app.post('/api/usuarios/me/penalidades/:penaltyId/pagar', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  res.json(await settlePenalty(viewer.clienteId, parsePositiveInt(req.params.penaltyId, 'Penalidad invalida.')));
+}));
+
 app.get('/api/usuarios/me/metricas', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   res.json(await getUserSummary(viewer.clienteId));
+}));
+
+app.get('/api/usuarios/me/estadisticas', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  res.json(await getUserSummary(viewer.clienteId));
+}));
+
+app.get('/api/usuarios/me/actividad-reciente', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  res.json(await getUserBids(viewer.clienteId, req.query));
+}));
+
+app.get('/api/usuarios/me/pujas', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  res.json(await getUserBids(viewer.clienteId, req.query));
+}));
+
+app.get('/api/usuarios/me/favoritos', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  if (await isGuest(viewer.clienteId)) return res.json([]);
+  res.json(await getFavoriteAuctions(viewer.clienteId));
+}));
+
+app.post('/api/usuarios/me/favoritos/:itemId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para guardar favoritos.');
+  const auctionId = await resolveAuctionIdFromItemOrAuction(req.params.itemId);
+  await run('INSERT IGNORE INTO favoritos (cliente, subasta) VALUES (?, ?)', [viewer.clienteId, auctionId]);
+  res.status(201).json(await getFavoriteAuctions(viewer.clienteId));
+}));
+
+app.delete('/api/usuarios/me/favoritos/:itemId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para quitar favoritos.');
+  const auctionId = await resolveAuctionIdFromItemOrAuction(req.params.itemId);
+  await run('DELETE FROM favoritos WHERE cliente = ? AND subasta = ?', [viewer.clienteId, auctionId]);
+  res.json(await getFavoriteAuctions(viewer.clienteId));
 }));
 
 app.get('/api/notificaciones', wrap(async (req, res) => {
@@ -565,6 +703,16 @@ app.post('/api/notificaciones/:notificationId/accion', wrap(async (req, res) => 
   });
 }));
 
+app.patch('/api/notificaciones/:notificationId/leer', wrap(async (req, res) => {
+  await requireAuthenticatedClient(req);
+  res.json({ ok: true, id: req.params.notificationId, read: true });
+}));
+
+app.patch('/api/notificaciones/leer-todas', wrap(async (req, res) => {
+  await requireAuthenticatedClient(req);
+  res.json({ ok: true, readAll: true });
+}));
+
 app.post('/api/uploads', wrap(async (req, res) => {
   await requireAuthenticatedClient(req);
   const files = Array.isArray(req.body.files) ? req.body.files : [];
@@ -578,6 +726,14 @@ app.get('/api/solicitudes-venta', wrap(async (req, res) => {
   res.json({ solicitudes: lots.map(toSaleRequestContract) });
 }));
 
+app.get('/api/solicitudes-venta/:requestId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const requestId = parsePositiveInt(req.params.requestId, 'Solicitud invalida.');
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === requestId);
+  if (!lot) throw new Error('No encontramos esa solicitud.');
+  res.json(toSaleRequestContract(lot));
+}));
+
 app.post('/api/solicitudes-venta', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para cargar lotes a subasta.');
@@ -586,6 +742,61 @@ app.post('/api/solicitudes-venta', wrap(async (req, res) => {
   const rows = await getUserLots(viewer.clienteId);
   const created = rows.find((row) => row.id === result.insertId);
   res.status(201).json(toSaleRequestContract(created));
+}));
+
+app.post('/api/solicitudes-venta/:requestId/aceptar-condiciones', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const requestId = parsePositiveInt(req.params.requestId, 'Solicitud invalida.');
+  await run(
+    "UPDATE solicitudes_lotes SET estado = 'aceptado', actualizado_en = CURRENT_TIMESTAMP WHERE identificador = ? AND cliente = ?",
+    [requestId, viewer.clienteId]
+  );
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === requestId);
+  if (!lot) throw new Error('No encontramos esa solicitud.');
+  res.json(toSaleRequestContract(lot));
+}));
+
+app.post('/api/solicitudes-venta/:requestId/rechazar-condiciones', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const requestId = parsePositiveInt(req.params.requestId, 'Solicitud invalida.');
+  await run(
+    "UPDATE solicitudes_lotes SET estado = 'rechazado', motivo_rechazo = COALESCE(?, motivo_rechazo), actualizado_en = CURRENT_TIMESTAMP WHERE identificador = ? AND cliente = ?",
+    [normalizeWhitespace(req.body.motivo ?? req.body.reason ?? 'Condiciones rechazadas por el usuario.'), requestId, viewer.clienteId]
+  );
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === requestId);
+  if (!lot) throw new Error('No encontramos esa solicitud.');
+  res.json(toSaleRequestContract(lot));
+}));
+
+app.get('/api/mis-bienes', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const lots = await getUserLots(viewer.clienteId);
+  res.json(lots.filter((lot) => ['aceptado', 'en_subasta', 'en_inspeccion'].includes(lot.status)).map(toSaleRequestContract));
+}));
+
+app.get('/api/mis-bienes/:productId/seguro', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const productId = parsePositiveInt(req.params.productId, 'Producto invalido.');
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === productId);
+  if (!lot) throw new Error('No encontramos ese bien.');
+  res.json({
+    productoId: productId,
+    aseguradora: lot.insuranceCompany ?? null,
+    poliza: lot.insurancePolicy ?? null,
+    estado: lot.insurancePolicy ? 'vigente' : 'pendiente'
+  });
+}));
+
+app.get('/api/mis-bienes/:productId/ubicacion', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const productId = parsePositiveInt(req.params.productId, 'Producto invalido.');
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === productId);
+  if (!lot) throw new Error('No encontramos ese bien.');
+  res.json({
+    productoId: productId,
+    ubicacion: lot.storageLocation ?? 'Pendiente de deposito',
+    estado: lot.status
+  });
 }));
 
 app.get('/api/subastas', wrap(async (req, res) => {
@@ -597,6 +808,14 @@ app.get('/api/subastas/:auctionId/catalogo', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   const detail = await getAuctionDetail(parsePositiveInt(req.params.auctionId, 'Subasta invalida.'), viewer.clienteId);
   res.json({ catalogo: [toCatalogLot(detail)] });
+}));
+
+app.get('/api/subastas/:auctionId/catalogo/:itemId', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const detail = await getAuctionDetail(parsePositiveInt(req.params.auctionId, 'Subasta invalida.'), viewer.clienteId);
+  const itemId = parsePositiveInt(req.params.itemId, 'Item invalido.');
+  if (Number(detail.itemId) !== itemId && Number(detail.productId) !== itemId) throw new Error('No encontramos ese item.');
+  res.json(toCatalogLot(detail));
 }));
 
 app.get('/api/subastas/:auctionId/stream', wrap(async (req, res) => {
@@ -633,6 +852,17 @@ app.post('/api/subastas/:auctionId/registrar', wrap(async (req, res) => {
   res.json(await enterAuctionRoom(viewer.clienteId, parsePositiveInt(req.params.auctionId, 'Subasta invalida.')));
 }));
 
+app.post('/api/subastas/:auctionId/ingresar', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para ingresar a una sala.');
+  res.json(await enterAuctionRoom(viewer.clienteId, parsePositiveInt(req.params.auctionId, 'Subasta invalida.')));
+}));
+
+app.post('/api/subastas/:auctionId/salir', wrap(async (req, res) => {
+  await requireAuthenticatedClient(req);
+  res.json({ ok: true, message: 'Salida registrada.' });
+}));
+
 app.post('/api/subastas/:auctionId/pujas', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   const amount = parseMoney(req.body.monto ?? req.body.amount, 'Ingresa un monto valido para pujar.');
@@ -645,6 +875,30 @@ app.post('/api/subastas/:auctionId/pujas', wrap(async (req, res) => {
     bounds: bidResult.bounds,
     lote: toCatalogLot(bidResult.auction)
   });
+}));
+
+app.post('/api/subastas/:auctionId/items/:itemId/pujar', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const amount = parseMoney(req.body.importe ?? req.body.monto ?? req.body.amount, 'Ingresa un monto valido para pujar.');
+  const auctionId = parsePositiveInt(req.params.auctionId, 'Subasta invalida.');
+  const itemId = parsePositiveInt(req.params.itemId, 'Item invalido.');
+  const detail = await getAuctionDetail(auctionId, viewer.clienteId);
+  if (Number(detail.itemId) !== itemId && Number(detail.productId) !== itemId) throw new Error('No encontramos ese item.');
+  const bidResult = await placeAuctionBid(viewer.clienteId, auctionId, amount, req.body.medioDePagoId ?? req.body.medioPagoId ?? req.body.paymentMethodId);
+  res.status(201).json({
+    bid: { id: bidResult.bid.id, amount: bidResult.bid.amount, monto: bidResult.bid.amount },
+    bounds: bidResult.bounds,
+    lote: toCatalogLot(bidResult.auction)
+  });
+}));
+
+app.get('/api/subastas/:auctionId/items/:itemId/pujas', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const detail = await getAuctionDetail(parsePositiveInt(req.params.auctionId, 'Subasta invalida.'), viewer.clienteId);
+  const itemId = parsePositiveInt(req.params.itemId, 'Item invalido.');
+  if (Number(detail.itemId) !== itemId && Number(detail.productId) !== itemId) throw new Error('No encontramos ese item.');
+  const feed = await getAuctionBidFeed(detail.itemId);
+  res.json(feed.slice(0, Number(req.query.limite || 20)));
 }));
 
 app.get('/api/auctions/home', wrap(async (_req, res) => {
@@ -891,11 +1145,70 @@ app.get('/api/users/:clienteId/penalties', wrap(async (req, res) => {
 
 app.post('/api/users/:clienteId/penalties/:penaltyId/settle', wrap(async (req, res) => {
   const viewer = await requireMatchingClient(req, req.params.clienteId);
-  const penaltyId = parsePositiveInt(req.params.penaltyId, 'Penalidad invalida.');
-  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para resolver penalidades.');
+  res.json(await settlePenalty(viewer.clienteId, parsePositiveInt(req.params.penaltyId, 'Penalidad invalida.')));
+}));
+
+async function settlePurchase(clienteId, bidId) {
+  await assertNotGuest(clienteId, 'Verifica tu cuenta para registrar compras.');
+  const purchase = await first(
+    `SELECT p.identificador AS id, p.importe AS amount, s.identificador AS auctionId,
+      prod.identificador AS productId, prod.duenio AS ownerId, i.identificador AS itemId,
+      i.comision AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
+      r.estado_pago AS paymentStatus
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     JOIN productos prod ON prod.identificador = i.producto
+     LEFT JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
+     WHERE a.cliente = ? AND p.identificador = ? AND p.ganador = 'si'
+     LIMIT 1`,
+    [clienteId, bidId]
+  );
+
+  if (!purchase) throw new Error('No encontramos una compra pendiente para esa puja.');
+  if (purchase.receiptId) {
+    await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['pagada', purchase.receiptId]);
+  } else {
+    await run(
+      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [purchase.auctionId, purchase.ownerId, purchase.productId, clienteId, purchase.paymentMethodId, purchase.amount, purchase.commission, 'pagada']
+    );
+    await run('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', ['si', purchase.itemId]);
+  }
+}
+
+async function savePurchaseDelivery(clienteId, bidId, value) {
+  const deliveryAddress = normalizeAddress(value);
+
+  const purchase = await first(
+    `SELECT r.identificador AS receiptId
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     JOIN productos prod ON prod.identificador = i.producto
+     JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
+     WHERE a.cliente = ? AND p.identificador = ? AND p.ganador = 'si'
+     LIMIT 1`,
+    [clienteId, bidId]
+  );
+
+  if (!purchase) throw new Error('No encontramos una puja ganada para cargar entrega.');
+  await run('UPDATE registro_de_subasta SET direccion_entrega = ? WHERE identificador = ?', [
+    deliveryAddress,
+    purchase.receiptId
+  ]);
+}
+
+async function settlePenalty(clienteId, penaltyId) {
+  await assertNotGuest(clienteId, 'Verifica tu cuenta para resolver penalidades.');
   const penalty = await first(
     'SELECT identificador AS id, estado AS status FROM penalidades WHERE identificador = ? AND cliente = ? LIMIT 1',
-    [penaltyId, viewer.clienteId]
+    [penaltyId, clienteId]
   );
   if (!penalty) throw new Error('No encontramos esa penalidad.');
   if (penalty.status !== 'activa' && penalty.status !== 'vencida') {
@@ -904,11 +1217,65 @@ app.post('/api/users/:clienteId/penalties/:penaltyId/settle', wrap(async (req, r
   await run('UPDATE penalidades SET estado = ? WHERE identificador = ? AND cliente = ?', [
     'pagada',
     penaltyId,
-    viewer.clienteId
+    clienteId
   ]);
-  await refreshClientCategory(viewer.clienteId);
-  res.json(await getUserPenalties(viewer.clienteId));
-}));
+  await refreshClientCategory(clienteId);
+  return getUserPenalties(clienteId);
+}
+
+async function resolveAuctionIdFromItemOrAuction(value) {
+  const id = parsePositiveInt(value, 'Item invalido.');
+  const item = await first(
+    `SELECT s.identificador AS auctionId
+     FROM items_catalogo i
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     WHERE i.identificador = ? OR s.identificador = ?
+     LIMIT 1`,
+    [id, id]
+  );
+  if (!item) throw new Error('No encontramos ese item.');
+  return item.auctionId;
+}
+
+async function getUserBids(clienteId, filters = {}) {
+  const status = normalizeWhitespace(filters.estado ?? filters.status).toLowerCase();
+  const auctionId = filters.subastaId || filters.auctionId
+    ? parsePositiveInt(filters.subastaId ?? filters.auctionId, 'Subasta invalida.')
+    : null;
+  const rows = await query(
+    `SELECT p.identificador AS id, p.importe AS amount, p.ganador AS winner, p.creado_en AS createdAt,
+      s.identificador AS auctionId, s.titulo AS title, i.cierre_estado AS closureStatus,
+      i.timer_vencimiento AS timerExpiresAt,
+      winner.identificador AS winnerBidId
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     LEFT JOIN pujos winner ON winner.item = i.identificador AND winner.ganador = 'si'
+     WHERE a.cliente = ?
+       ${auctionId ? 'AND s.identificador = ?' : ''}
+     ORDER BY p.identificador DESC
+     LIMIT 50`,
+    auctionId ? [clienteId, auctionId] : [clienteId]
+  );
+
+  const mapped = rows.map((row) => {
+    let bidStatus = 'perdida';
+    if (row.winner === 'si' && row.closureStatus === 'finalizada') bidStatus = 'ganadora';
+    else if (row.winner === 'si') bidStatus = 'liderando';
+    else if (row.winnerBidId && Number(row.winnerBidId) !== Number(row.id)) bidStatus = 'superada';
+    return {
+      ...row,
+      amount: Number(row.amount),
+      estado: bidStatus,
+      status: bidStatus
+    };
+  });
+
+  return status ? mapped.filter((bid) => bid.status === status) : mapped;
+}
 
 async function getAuctionRows(viewer = null) {
   await settleExpiredAuctionTimers();
@@ -2083,7 +2450,8 @@ function validatePassword(password, confirmPassword) {
 }
 
 function sanitizePayment(payload) {
-  const type = normalizeWhitespace(payload.type).toLowerCase();
+  const rawType = normalizeWhitespace(payload.type).toLowerCase();
+  const type = rawType === 'cuenta_bancaria' ? 'cuenta' : rawType;
   const amount = parseMoney(payload.amount, 'Ingresa un monto de garantia mayor a cero.');
 
   if (!['tarjeta', 'cuenta', 'cheque'].includes(type)) {
@@ -2187,7 +2555,8 @@ function buildPaymentDetail(payload) {
 }
 
 function fromLegacyPaymentInput(payload) {
-  const type = normalizeWhitespace(payload.tipo ?? payload.type).toLowerCase();
+  const rawType = normalizeWhitespace(payload.tipo ?? payload.type).toLowerCase();
+  const type = rawType === 'cuenta_bancaria' ? 'cuenta' : rawType;
   if (type === 'tarjeta') {
     const lastDigits = onlyDigits(payload.ultimosDigitos || '').slice(-4) || '1111';
     return {
