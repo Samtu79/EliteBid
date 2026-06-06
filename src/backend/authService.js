@@ -26,9 +26,9 @@ export async function getActiveSession() {
   return user;
 }
 
-export async function resendVerificationEmail(email) {
+export async function resendVerificationEmail(identifier) {
   return apiRequest('/auth/resend-verification', {
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ identifier }),
     method: 'POST'
   });
 }

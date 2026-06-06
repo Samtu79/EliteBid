@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -13,9 +14,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import { getAuctionDetail, placeBid } from '../backend/auctionService';
+import { getPaymentMethods } from '../backend/paymentService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import { colors, radii } from '../theme';
+
+const SHIPPING_COST = 25000;
 
 export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpenNotifications, user }) {
   const [auction, setAuction] = useState(null);
@@ -24,12 +28,24 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [payments, setPayments] = useState([]);
+  const [selectedPaymentId, setSelectedPaymentId] = useState(null);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [placedBidInRoom, setPlacedBidInRoom] = useState(false);
   const [toast, setToast] = useState(null);
+  const leadingActive = Boolean(
+    placedBidInRoom &&
+    auction?.closure?.winner?.isCurrentUser &&
+      auction?.closureStatus === 'en_cuenta' &&
+      auction?.status !== 'cerrada' &&
+      Number(secondsRemaining || 0) > 0
+  );
 
   async function load() {
     const detail = await getAuctionDetail(auctionId, user.clienteId);
 
     setAuction(detail);
+    setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
     setLoading(false);
   }
 
@@ -38,10 +54,17 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
     async function run() {
       try {
-        const detail = await getAuctionDetail(auctionId, user.clienteId);
+        const [detail, userPayments] = await Promise.all([
+          getAuctionDetail(auctionId, user.clienteId),
+          getPaymentMethods(user.clienteId)
+        ]);
+        const verifiedPayments = userPayments.filter((payment) => payment.verified === 'si');
 
         if (mounted) {
           setAuction(detail);
+          setPayments(verifiedPayments);
+          setSelectedPaymentId((current) => current ?? verifiedPayments[0]?.id ?? null);
+          setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
           setAmount(formatInputAmount(getSuggestedBid(detail)));
         }
       } catch (loadError) {
@@ -61,6 +84,45 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       mounted = false;
     };
   }, [auctionId, user.clienteId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsRemaining((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      try {
+        const detail = await getAuctionDetail(auctionId, user.clienteId);
+        setAuction(detail);
+        setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
+      } catch (pollError) {
+        setError(pollError.message);
+      }
+    }, 5000);
+
+    return () => clearInterval(poll);
+  }, [auctionId, user.clienteId]);
+
+  useEffect(() => {
+    if (!BackHandler?.addEventListener) {
+      return undefined;
+    }
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!leadingActive) {
+        return false;
+      }
+
+      showLeadingLock();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [leadingActive]);
 
   const rules = useMemo(() => {
     if (!auction) {
@@ -115,11 +177,17 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     setSending(true);
 
     try {
-      const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount));
+      if (!selectedPaymentId) {
+        throw new Error('Selecciona un medio de pago verificado para pujar.');
+      }
+
+      const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
 
       setAuction(result.auction);
+      setPlacedBidInRoom(true);
+      setSecondsRemaining(Number(result.auction.closure?.secondsRemaining ?? result.auction.timerSecondsRemaining ?? 0));
       setAmount(formatInputAmount(getSuggestedBid(result.auction)));
-      setMessage('Puja confirmada. Ahora estas liderando este lote.');
+      setMessage('Puja confirmada. El contador volvio a 1 minuto.');
       setToast({ message: 'Puja registrada. Vas liderando este lote.', tone: 'success' });
       await load();
     } catch (bidError) {
@@ -149,6 +217,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const bidButtonLabel = Number.isFinite(rules.typedAmount) && rules.typedAmount > 0
     ? `Pujar ${formatMoney(rules.typedAmount)}`
     : 'Pujar';
+  const finalized = auction.status === 'cerrada' || auction.closureStatus === 'finalizada';
+  const counting = auction.closureStatus === 'en_cuenta' && !finalized;
 
   return (
     <View style={styles.container}>
@@ -158,17 +228,19 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       />
 
       <View style={styles.topBar}>
-        <Pressable onPress={onBack} style={styles.iconButton}>
+        <Pressable onPress={() => guardRoomExit(onBack)} style={styles.iconButton}>
           <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
         </Pressable>
         <View style={styles.brandBlock}>
           <Text style={styles.brand}>Elite Bid</Text>
           <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveBadgeText}>En vivo</Text>
+            <View style={[styles.liveDot, finalized && styles.liveDotClosed]} />
+            <Text style={[styles.liveBadgeText, finalized && styles.liveBadgeTextClosed]}>
+              {finalized ? 'Finalizada' : counting ? 'En cuenta' : 'En vivo'}
+            </Text>
           </View>
         </View>
-        <Pressable onPress={onOpenNotifications} style={styles.iconButton}>
+        <Pressable onPress={() => guardRoomExit(onOpenNotifications)} style={styles.iconButton}>
           <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={24} />
         </Pressable>
       </View>
@@ -205,22 +277,45 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         <View style={styles.bidSurface}>
           <Text style={styles.panelLabel}>Puja actual</Text>
           <Text style={styles.currentBid}>{formatMoney(rules.currentBid)}</Text>
+          <View style={[styles.timerBox, finalized && styles.timerBoxClosed]}>
+            <MaterialCommunityIcons
+              color={finalized ? '#73E6A2' : colors.primary}
+              name={finalized ? 'check-decagram' : 'timer-outline'}
+              size={22}
+            />
+            <View style={styles.timerCopy}>
+              <Text style={styles.timerLabel}>
+                {finalized ? 'Lote adjudicado' : counting ? 'Cierra si nadie mejora en' : 'Cuenta por iniciar'}
+              </Text>
+              <Text style={[styles.timerValue, finalized && styles.timerValueClosed]}>
+                {finalized ? getClosureCopy(auction) : counting ? formatCountdown(secondsRemaining) : 'Al pujar'}
+              </Text>
+            </View>
+          </View>
           <View style={styles.auctioneerRow}>
             <MaterialCommunityIcons color={colors.secondary} name="account-voice" size={17} />
             <Text style={styles.auctioneerText}>{auction.auctioneer}</Text>
             <View style={styles.roomPill}>
               <MaterialCommunityIcons color="#73E6A2" name="broadcast" size={14} />
-              <Text style={styles.roomPillText}>Sala abierta</Text>
+              <Text style={styles.roomPillText}>{finalized ? 'Cerrada' : 'Sala abierta'}</Text>
             </View>
           </View>
 
+          {finalized ? (
+            <View style={styles.resultBox}>
+              <Text style={styles.resultTitle}>{auction.closure?.winner?.isCurrentUser ? 'Ganaste la pieza' : 'Subasta finalizada'}</Text>
+              <Text style={styles.resultText}>{getFinalResultText(auction)}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.stepper}>
-            <Pressable disabled={sending} onPress={() => adjustBid(-1)} style={styles.stepButton}>
+            <Pressable disabled={sending || finalized} onPress={() => adjustBid(-1)} style={styles.stepButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="minus" size={24} />
             </Pressable>
             <View style={styles.amountBox}>
               <Text style={styles.amountLabel}>Tu puja</Text>
               <TextInput
+                editable={!finalized && !sending}
                 keyboardType="numeric"
                 onChangeText={(value) => {
                   setAmount(value);
@@ -234,9 +329,40 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                 value={amount}
               />
             </View>
-            <Pressable disabled={sending} onPress={() => adjustBid(1)} style={styles.stepButton}>
+            <Pressable disabled={sending || finalized} onPress={() => adjustBid(1)} style={styles.stepButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="plus" size={24} />
             </Pressable>
+          </View>
+
+          <View style={styles.paymentPanel}>
+            <Text style={styles.paymentLabel}>Medio de pago para esta puja</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.paymentOptions}>
+                {payments.map((payment) => {
+                  const selected = Number(selectedPaymentId) === Number(payment.id);
+                  return (
+                    <Pressable
+                      disabled={finalized || sending}
+                      key={payment.id}
+                      onPress={() => setSelectedPaymentId(payment.id)}
+                      style={[styles.paymentChip, selected && styles.paymentChipSelected]}
+                    >
+                      <MaterialCommunityIcons
+                        color={selected ? colors.onPrimaryFixed : colors.primary}
+                        name={getPaymentIcon(payment.type)}
+                        size={16}
+                      />
+                      <Text style={[styles.paymentChipText, selected && styles.paymentChipTextSelected]}>
+                        {getPaymentLabel(payment)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                {payments.length === 0 ? (
+                  <Text style={styles.noPaymentText}>No hay medios verificados.</Text>
+                ) : null}
+              </View>
+            </ScrollView>
           </View>
 
           <View style={styles.rangeRow}>
@@ -246,7 +372,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             </Text>
           </View>
 
-          <Pressable disabled={sending} onPress={submitBid} style={styles.bidButton}>
+          <Pressable
+            disabled={sending || finalized || !selectedPaymentId}
+            onPress={submitBid}
+            style={[styles.bidButton, (finalized || !selectedPaymentId) && styles.bidButtonDisabled]}
+          >
             {sending ? (
               <ActivityIndicator color={colors.onPrimaryFixed} />
             ) : (
@@ -256,8 +386,10 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             )}
           </Pressable>
 
-          <Pressable onPress={onBack} style={styles.watchButton}>
-            <Text style={styles.watchButtonText}>Solo ver subasta</Text>
+          <Pressable onPress={() => guardRoomExit(onBack)} style={[styles.watchButton, leadingActive && styles.watchButtonLocked]}>
+            <Text style={[styles.watchButtonText, leadingActive && styles.watchButtonTextLocked]}>
+              {leadingActive ? 'Esperando cierre de puja' : 'Solo ver subasta'}
+            </Text>
           </Pressable>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -284,7 +416,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         </View>
       </ScrollView>
 
-      <BottomNav activeTab="auctions" onNavigate={onNavigate} />
+      <BottomNav activeTab="auctions" onNavigate={(tab) => guardRoomExit(() => onNavigate?.(tab))} />
       <AppToast
         bottom={bottomNavHeight + 12}
         message={toast?.message}
@@ -319,6 +451,59 @@ function FeedRow({ bid }) {
 
 function getSuggestedBid(auction) {
   return Number(auction.currentBid || auction.basePrice || 0) + Number(auction.basePrice || 0) * 0.01;
+}
+
+function formatCountdown(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function getClosureCopy(auction) {
+  if (auction.closure?.reason === 'compra_empresa_sin_pujas') return 'Compra empresa';
+  return auction.closure?.winner?.bidderAlias ?? 'Finalizada';
+}
+
+function getFinalResultText(auction) {
+  if (auction.closure?.reason === 'compra_empresa_sin_pujas') {
+    return `Nadie mejoro la oferta. La empresa compra el lote por el valor base de ${formatMoney(auction.basePrice)}.`;
+  }
+
+  function showLeadingLock() {
+    setToast({
+      message: 'Vas primero en esta subasta. No podes salir hasta que termine o superen tu puja.',
+      tone: 'danger'
+    });
+  }
+
+  function guardRoomExit(callback) {
+    if (leadingActive) {
+      showLeadingLock();
+      return;
+    }
+
+    callback?.();
+  }
+  if (auction.closure?.winner?.isCurrentUser) {
+    const amount = auction.closure.winner.amount;
+    const total = Number(amount || 0) + Number(auction.commission || 0) + SHIPPING_COST;
+    return `Se registro la venta. Total a pagar: puja ${formatMoney(amount)}, comision ${formatMoney(auction.commission)} y envio ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(total)}.`;
+  }
+  return `${auction.closure?.winner?.bidderAlias ?? 'El ultimo postor'} se queda con la pieza por ${formatMoney(auction.closure?.winner?.amount ?? auction.currentBid)}.`;
+}
+
+function getPaymentIcon(type) {
+  if (type === 'tarjeta') return 'credit-card-outline';
+  if (type === 'cheque') return 'file-document-check-outline';
+  return 'bank-outline';
+}
+
+function getPaymentLabel(payment) {
+  const detail = payment.parsedDetail || {};
+  if (payment.type === 'tarjeta') return `${detail.brand || 'Tarjeta'} ${detail.cardNumberLast4 || ''}`.trim();
+  if (payment.type === 'cheque') return `Cheque ${detail.checkNumberLast4 || ''}`.trim();
+  return `${detail.bank || 'Cuenta'} ${detail.cbuLast4 || detail.alias || ''}`.trim();
 }
 
 function parseCurrency(value) {
@@ -394,6 +579,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 12,
     paddingHorizontal: 16
+  },
+  bidButtonDisabled: {
+    opacity: 0.48
   },
   bidButtonText: {
     color: colors.onPrimaryFixed,
@@ -565,11 +753,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
+  liveBadgeTextClosed: {
+    color: '#73E6A2'
+  },
   liveDot: {
     backgroundColor: colors.error,
     borderRadius: radii.full,
     height: 7,
     width: 7
+  },
+  liveDotClosed: {
+    backgroundColor: '#73E6A2'
   },
   loading: {
     alignItems: 'center',
@@ -591,6 +785,49 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
     textTransform: 'uppercase'
+  },
+  noPaymentText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '800',
+    paddingVertical: 8
+  },
+  paymentChip: {
+    alignItems: 'center',
+    borderColor: 'rgba(204, 193, 255, 0.22)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12
+  },
+  paymentChipSelected: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryContainer
+  },
+  paymentChipText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900'
+  },
+  paymentChipTextSelected: {
+    color: colors.onPrimaryFixed
+  },
+  paymentLabel: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 9,
+    textTransform: 'uppercase'
+  },
+  paymentOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 6
+  },
+  paymentPanel: {
+    marginTop: 12
   },
   rangeRow: {
     flexDirection: 'row',
@@ -617,6 +854,29 @@ const styles = StyleSheet.create({
     color: '#73E6A2',
     fontSize: 10,
     fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  resultBox: {
+    backgroundColor: 'rgba(115, 230, 162, 0.1)',
+    borderColor: 'rgba(115, 230, 162, 0.24)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginTop: 12,
+    padding: 12
+  },
+  resultText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+    textAlign: 'center'
+  },
+  resultTitle: {
+    color: '#73E6A2',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
     textTransform: 'uppercase'
   },
   sectionTitle: {
@@ -678,6 +938,43 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12
   },
+  timerBox: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(208, 188, 255, 0.1)',
+    borderColor: 'rgba(208, 188, 255, 0.22)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  timerBoxClosed: {
+    backgroundColor: 'rgba(115, 230, 162, 0.1)',
+    borderColor: 'rgba(115, 230, 162, 0.22)'
+  },
+  timerCopy: {
+    alignItems: 'flex-start'
+  },
+  timerLabel: {
+    color: colors.onSurfaceVariant,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  timerValue: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 25,
+    marginTop: 1
+  },
+  timerValueClosed: {
+    color: '#73E6A2',
+    fontSize: 16
+  },
   topBar: {
     alignItems: 'center',
     backgroundColor: 'rgba(26, 11, 49, 0.95)',
@@ -693,10 +990,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 6
   },
+  watchButtonLocked: {
+    opacity: 0.85
+  },
   watchButtonText: {
     color: colors.onSurfaceVariant,
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase'
+  },
+  watchButtonTextLocked: {
+    color: colors.error
   }
 });

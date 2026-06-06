@@ -11,6 +11,9 @@ require('dotenv').config();
 
 const app = express();
 const SESSION_DAYS = 7;
+const BID_TIMER_SECONDS = 60;
+const COMPANY_CLIENT_ID = 900001;
+const SHIPPING_COST = 25000;
 const categoryRank = { comun: 1, especial: 2, plata: 3, oro: 4, platino: 5 };
 const categoryRequirements = [
   {
@@ -311,19 +314,24 @@ app.post('/api/auth/register/paso2', wrap(async (req, res) => {
 }));
 
 app.post('/api/auth/resend-verification', wrap(async (req, res) => {
-  const email = normalizeEmail(req.body.email);
-  if (!email) throw new Error('Ingresa un correo valido.');
+  const rawIdentifier = normalizeWhitespace(req.body.identifier ?? req.body.email ?? req.body.documentNumber ?? req.body.dni);
+  if (!rawIdentifier) throw new Error('Ingresa un email o DNI valido.');
+  const email = normalizeEmail(rawIdentifier);
+  const documentNumber = email ? '' : normalizeDocument(rawIdentifier);
+  if (!email && !documentNumber) throw new Error('Ingresa un email o DNI valido.');
 
   const user = await first(
-    `SELECT id, email, nombre
-     FROM usuarios
-     WHERE lower(email) = ? AND rol = 'invitado' AND email_verificado = 'no' AND estado = 'pendiente'
+    `SELECT u.id, u.email, u.nombre
+     FROM usuarios u
+     JOIN clientes c ON c.identificador = u.cliente_id
+     WHERE ${email ? 'lower(u.email) = ?' : 'c.identificador = ?'}
+       AND u.rol = 'invitado' AND u.email_verificado = 'no' AND u.estado = 'pendiente'
      LIMIT 1`,
-    [email]
+    [email || documentNumber]
   );
 
   if (!user) {
-    return res.json({ ok: true, verificationEmailSent: false });
+    throw new Error('No encontramos una cuenta invitada pendiente con esos datos.');
   }
 
   const verificationCode = createOneTimeCode();
@@ -340,6 +348,7 @@ app.post('/api/auth/resend-verification', wrap(async (req, res) => {
 
   res.json({
     ok: true,
+    email: maskEmail(user.email),
     verificationEmailSent: emailResult.sent
   });
 }));
@@ -627,8 +636,9 @@ app.post('/api/subastas/:auctionId/pujas', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   const amount = parseMoney(req.body.monto ?? req.body.amount, 'Ingresa un monto valido para pujar.');
   const auctionId = parsePositiveInt(req.params.auctionId, 'Subasta invalida.');
+  const paymentMethodId = req.body.medioPagoId ?? req.body.paymentMethodId;
 
-  const bidResult = await placeAuctionBid(viewer.clienteId, auctionId, amount);
+  const bidResult = await placeAuctionBid(viewer.clienteId, auctionId, amount, paymentMethodId);
   res.status(201).json({
     bid: { id: bidResult.bid.id, amount: bidResult.bid.amount, monto: bidResult.bid.amount },
     bounds: bidResult.bounds,
@@ -664,8 +674,9 @@ app.post('/api/auctions/:auctionId/bids', wrap(async (req, res) => {
   const amount = parseMoney(req.body.amount, 'Ingresa un monto valido para pujar.');
   const viewer = await requireMatchingClient(req, req.body.clienteId);
   const auctionId = parsePositiveInt(req.params.auctionId, 'Subasta invalida.');
+  const paymentMethodId = req.body.paymentMethodId ?? req.body.medioPagoId;
 
-  const bidResult = await placeAuctionBid(viewer.clienteId, auctionId, amount);
+  const bidResult = await placeAuctionBid(viewer.clienteId, auctionId, amount, paymentMethodId);
   res.json({ auction: bidResult.auction, bid: bidResult.bid });
 }));
 
@@ -739,7 +750,8 @@ app.post('/api/users/:clienteId/purchases/:bidId/settle', wrap(async (req, res) 
   const purchase = await first(
     `SELECT p.identificador AS id, p.importe AS amount, s.identificador AS auctionId,
       prod.identificador AS productId, prod.duenio AS ownerId, i.identificador AS itemId,
-      i.comision AS commission, r.identificador AS receiptId
+      i.comision AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
+      r.estado_pago AS paymentStatus
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
      JOIN items_catalogo i ON i.identificador = p.item
@@ -753,15 +765,45 @@ app.post('/api/users/:clienteId/purchases/:bidId/settle', wrap(async (req, res) 
   );
 
   if (!purchase) throw new Error('No encontramos una compra pendiente para esa puja.');
-  if (!purchase.receiptId) {
+  if (purchase.receiptId) {
+    await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['pagada', purchase.receiptId]);
+  } else {
     await run(
-      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, importe, comision)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [purchase.auctionId, purchase.ownerId, purchase.productId, viewer.clienteId, purchase.amount, purchase.commission]
+      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [purchase.auctionId, purchase.ownerId, purchase.productId, viewer.clienteId, purchase.paymentMethodId, purchase.amount, purchase.commission, 'pagada']
     );
     await run('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', ['si', purchase.itemId]);
   }
 
+  res.json(await getUserPurchases(viewer.clienteId));
+}));
+
+app.put('/api/users/:clienteId/purchases/:bidId/delivery', wrap(async (req, res) => {
+  const viewer = await requireMatchingClient(req, req.params.clienteId);
+  const bidId = parsePositiveInt(req.params.bidId, 'Puja invalida.');
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para cargar direcciones de entrega.');
+  const deliveryAddress = normalizeAddress(req.body.deliveryAddress ?? req.body.direccionEntrega);
+
+  const purchase = await first(
+    `SELECT r.identificador AS receiptId
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     JOIN productos prod ON prod.identificador = i.producto
+     JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
+     WHERE a.cliente = ? AND p.identificador = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada'
+     LIMIT 1`,
+    [viewer.clienteId, bidId]
+  );
+
+  if (!purchase) throw new Error('No encontramos una puja ganada para cargar entrega.');
+  await run('UPDATE registro_de_subasta SET direccion_entrega = ? WHERE identificador = ?', [
+    deliveryAddress,
+    purchase.receiptId
+  ]);
   res.json(await getUserPurchases(viewer.clienteId));
 }));
 
@@ -868,12 +910,15 @@ app.post('/api/users/:clienteId/penalties/:penaltyId/settle', wrap(async (req, r
 }));
 
 async function getAuctionRows(viewer = null) {
+  await settleExpiredAuctionTimers();
   const restrictedCatalog = !viewer || viewer.rol === 'invitado';
   const rows = await query(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
       s.ubicacion AS location, COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl,
-      p.descripcion_catalogo AS description, i.precio_base AS basePrice, i.puja_actual AS currentBid
+      p.descripcion_catalogo AS description, i.precio_base AS basePrice, i.puja_actual AS currentBid,
+      i.cierre_estado AS closureStatus,
+      GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), i.timer_vencimiento)) AS timerSecondsRemaining
      FROM subastas s
      JOIN catalogos c ON c.subasta = s.identificador
      JOIN items_catalogo i ON i.catalogo = c.identificador
@@ -886,6 +931,7 @@ async function getAuctionRows(viewer = null) {
 }
 
 async function getAuctionDetail(auctionId, clienteId) {
+  await settleExpiredAuctionTimers();
   const viewer = await getViewer(clienteId);
   const auction = await first(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
@@ -894,7 +940,11 @@ async function getAuctionDetail(auctionId, clienteId) {
       COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl, p.descripcion_catalogo AS description,
       p.descripcion_completa AS fullDescription, p.identificador AS productId,
       i.identificador AS itemId, i.precio_base AS basePrice, i.comision AS commission,
-      i.puja_actual AS currentBid, per.nombre AS auctioneer
+      i.puja_actual AS currentBid, i.subastado AS sold,
+      i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt,
+      i.cierre_estado AS closureStatus, i.cierre_motivo AS closureReason,
+      GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), i.timer_vencimiento)) AS timerSecondsRemaining,
+      per.nombre AS auctioneer
      FROM subastas s
      JOIN subastadores sub ON sub.identificador = s.subastador
      JOIN personas per ON per.identificador = sub.identificador
@@ -918,6 +968,7 @@ async function getAuctionDetail(auctionId, clienteId) {
   const detail = {
     ...auction,
     bidFeed: viewer?.rol === 'invitado' ? [] : await getAuctionBidFeed(auction.itemId),
+    closure: await getAuctionClosure(auction.itemId, clienteId),
     isFavorite: viewer?.rol === 'invitado' ? false : await isFavoriteAuction(clienteId, auctionId),
     eligibility: {
       categoryOk: viewer?.rol !== 'invitado' && await hasCategoryAccess(clienteId, auction.category),
@@ -942,7 +993,7 @@ async function enterAuctionRoom(clienteId, auctionId) {
 async function getAuctionBidFeed(itemId) {
   const rows = await query(
     `SELECT p.identificador AS id, p.importe AS amount, p.creado_en AS createdAt,
-      p.ganador AS winner, a.numero_postor AS bidderNumber
+      p.ganador AS winner, p.medio_pago AS paymentMethodId, a.numero_postor AS bidderNumber
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
      WHERE p.item = ?
@@ -950,6 +1001,165 @@ async function getAuctionBidFeed(itemId) {
     [itemId]
   );
   return rows.map((row) => ({ ...row, bidderAlias: `@postor${String(row.bidderNumber).padStart(3, '0')}` }));
+}
+
+async function getAuctionClosure(itemId, clienteId = null) {
+  const item = await first(
+    `SELECT i.cierre_estado AS status, i.cierre_motivo AS reason, i.subastado AS sold,
+      i.timer_vencimiento AS timerExpiresAt,
+      GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), i.timer_vencimiento)) AS secondsRemaining
+     FROM items_catalogo i
+     WHERE i.identificador = ?
+     LIMIT 1`,
+    [itemId]
+  );
+
+  const winningBid = await first(
+    `SELECT p.identificador AS bidId, p.importe AS amount, p.medio_pago AS paymentMethodId,
+      a.cliente AS clienteId, a.numero_postor AS bidderNumber
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     WHERE p.item = ? AND p.ganador = 'si'
+     ORDER BY p.identificador DESC
+     LIMIT 1`,
+    [itemId]
+  );
+
+  return {
+    reason: item?.reason ?? null,
+    secondsRemaining: Number(item?.secondsRemaining ?? 0),
+    sold: item?.sold === 'si',
+    status: item?.status ?? 'esperando_puja',
+    timerExpiresAt: item?.timerExpiresAt ?? null,
+    winner: winningBid
+      ? {
+          amount: Number(winningBid.amount),
+          bidId: winningBid.bidId,
+          bidderAlias: `@postor${String(winningBid.bidderNumber).padStart(3, '0')}`,
+          isCurrentUser: Number(winningBid.clienteId) === Number(clienteId),
+          paymentMethodId: winningBid.paymentMethodId
+        }
+      : null
+  };
+}
+
+async function resolveBidPayment(clienteId, paymentMethodId, amount) {
+  const requestedId = paymentMethodId ? parsePositiveInt(paymentMethodId, 'Medio de pago invalido.') : null;
+  const payment = await first(
+    `SELECT identificador AS id, monto_garantia AS guaranteeAmount
+     FROM medios_pago
+     WHERE cliente = ? AND verificado = 'si'
+       ${requestedId ? 'AND identificador = ?' : ''}
+     ORDER BY identificador ASC
+     LIMIT 1`,
+    requestedId ? [clienteId, requestedId] : [clienteId]
+  );
+
+  if (!payment) {
+    throw new Error(requestedId ? 'Selecciona un medio de pago verificado.' : 'Necesitas un medio de pago verificado para pujar.');
+  }
+
+  const guaranteeAmount = Number(payment.guaranteeAmount || 0);
+  if (guaranteeAmount > 0) {
+    const used = await first(
+      `SELECT COALESCE(SUM(p.importe), 0) AS total
+       FROM pujos p
+       JOIN asistentes a ON a.identificador = p.asistente
+       WHERE a.cliente = ? AND p.medio_pago = ? AND p.ganador = 'si'`,
+      [clienteId, payment.id]
+    );
+    const nextTotal = Number(used?.total || 0) + Number(amount || 0);
+    if (nextTotal > guaranteeAmount) {
+      throw new Error(`La puja supera la garantia disponible de ${formatMoney(guaranteeAmount)} para ese medio de pago.`);
+    }
+  }
+
+  return payment.id;
+}
+
+async function settleExpiredAuctionTimers() {
+  const rows = await query(
+    `SELECT i.identificador AS itemId
+     FROM items_catalogo i
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     WHERE s.estado = 'abierta'
+       AND i.cierre_estado = 'en_cuenta'
+       AND i.timer_vencimiento IS NOT NULL
+       AND i.timer_vencimiento <= UTC_TIMESTAMP()
+     ORDER BY i.timer_vencimiento ASC
+     LIMIT 20`
+  );
+
+  for (const row of rows) {
+    await finalizeAuctionItem(row.itemId);
+  }
+}
+
+async function finalizeAuctionItem(itemId) {
+  const item = await first(
+    `SELECT i.identificador AS itemId, i.precio_base AS basePrice, i.comision AS commission,
+      i.cierre_estado AS closureStatus, c.subasta AS auctionId, p.identificador AS productId,
+      p.duenio AS ownerId
+     FROM items_catalogo i
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN productos p ON p.identificador = i.producto
+     WHERE i.identificador = ?
+     LIMIT 1`,
+    [itemId]
+  );
+
+  if (!item || item.closureStatus === 'finalizada') return null;
+
+  const lastBid = await first(
+    `SELECT p.identificador AS bidId, p.importe AS amount, p.medio_pago AS paymentMethodId, a.cliente AS clienteId
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     WHERE p.item = ?
+     ORDER BY p.identificador DESC
+     LIMIT 1`,
+    [itemId]
+  );
+
+  const buyerClientId = lastBid?.clienteId ?? COMPANY_CLIENT_ID;
+  const amount = Number(lastBid?.amount ?? item.basePrice);
+  const paymentMethodId = lastBid?.paymentMethodId ?? null;
+  const reason = lastBid ? 'adjudicada_por_tiempo' : 'compra_empresa_sin_pujas';
+
+  if (lastBid) {
+    await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', itemId]);
+    await run('UPDATE pujos SET ganador = ? WHERE identificador = ?', ['si', lastBid.bidId]);
+  }
+
+  const receipt = await first(
+    `SELECT identificador AS id
+     FROM registro_de_subasta
+     WHERE subasta = ? AND producto = ?
+     LIMIT 1`,
+    [item.auctionId, item.productId]
+  );
+
+  if (!receipt) {
+    await run(
+      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, 'pendiente']
+    );
+  }
+
+  await run(
+    `UPDATE items_catalogo
+     SET subastado = 'si', cierre_estado = 'finalizada', cierre_motivo = ?
+     WHERE identificador = ?`,
+    [reason, itemId]
+  );
+  await run('UPDATE subastas SET estado = ? WHERE identificador = ?', ['cerrada', item.auctionId]);
+
+  if (lastBid) {
+    await refreshClientCategory(buyerClientId);
+  }
+
+  return { amount, buyerClientId, itemId, reason };
 }
 
 async function ensureAssistant(clienteId, auctionId) {
@@ -970,11 +1180,14 @@ async function ensureAssistant(clienteId, auctionId) {
   return result.insertId;
 }
 
-async function placeAuctionBid(clienteId, auctionId, amount) {
+async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = null) {
   await assertNotGuest(clienteId, 'Verifica tu cuenta para pujar.');
   if (amount <= 0) throw new Error('Ingresa un monto valido para pujar.');
 
   const detail = await enterAuctionRoom(clienteId, auctionId);
+  if (detail.closureStatus === 'finalizada' || detail.status === 'cerrada') {
+    throw new Error('Esta subasta ya finalizo.');
+  }
   const currentBid = Number(detail.currentBid || detail.basePrice || 0);
   const basePrice = Number(detail.basePrice || 0);
   const minBid = currentBid + basePrice * 0.01;
@@ -985,15 +1198,23 @@ async function placeAuctionBid(clienteId, auctionId, amount) {
   if (!bypassRange && amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
   if (!bypassRange && amount > maxBid) throw new Error(`El monto no puede superar ${formatMoney(maxBid)}.`);
 
+  const resolvedPaymentId = await resolveBidPayment(clienteId, paymentMethodId, amount);
   const assistantId = await ensureAssistant(clienteId, auctionId);
   await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', detail.itemId]);
-  const result = await run('INSERT INTO pujos (asistente, item, importe, ganador) VALUES (?, ?, ?, ?)', [
+  const result = await run('INSERT INTO pujos (asistente, item, medio_pago, importe, ganador) VALUES (?, ?, ?, ?, ?)', [
     assistantId,
     detail.itemId,
+    resolvedPaymentId,
     amount,
     'si'
   ]);
-  await run('UPDATE items_catalogo SET puja_actual = ? WHERE identificador = ?', [amount, detail.itemId]);
+  await run(
+    `UPDATE items_catalogo
+     SET puja_actual = ?, timer_inicio = UTC_TIMESTAMP(), timer_vencimiento = ?,
+       cierre_estado = 'en_cuenta', cierre_motivo = NULL
+     WHERE identificador = ?`,
+    [amount, toMysqlDateTime(new Date(Date.now() + BID_TIMER_SECONDS * 1000)), detail.itemId]
+  );
   await refreshClientCategory(clienteId);
 
   return {
@@ -1193,6 +1414,34 @@ async function getUserNotifications(viewer) {
         title: 'Agrega un medio de pago'
       });
     }
+
+    const pendingPurchase = await first(
+      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission, s.titulo AS title
+       FROM pujos p
+       JOIN asistentes a ON a.identificador = p.asistente
+       JOIN items_catalogo i ON i.identificador = p.item
+       JOIN catalogos c ON c.identificador = i.catalogo
+       JOIN subastas s ON s.identificador = c.subasta
+       JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = i.producto
+       WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada' AND r.estado_pago = 'pendiente'
+       ORDER BY p.identificador DESC
+       LIMIT 1`,
+      [viewer.clienteId]
+    );
+
+    if (pendingPurchase) {
+      const totalDue = Number(pendingPurchase.amount || 0) + Number(pendingPurchase.commission || 0) + SHIPPING_COST;
+      notifications.push({
+        id: `purchase-due-${pendingPurchase.bidId}`,
+        action: 'open_purchases',
+        createdAt: new Date().toISOString(),
+        description: `${pendingPurchase.title}: puja ${formatMoney(pendingPurchase.amount)}, comision ${formatMoney(pendingPurchase.commission)} y envio ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(totalDue)}.`,
+        priority: 'alta',
+        read: false,
+        target: 'purchases',
+        title: 'Subasta adjudicada'
+      });
+    }
   }
 
   const upcoming = await first(
@@ -1341,8 +1590,11 @@ async function getUserPurchases(clienteId) {
     `SELECT p.identificador AS id, p.importe AS amount, p.creado_en AS createdAt,
       p.ganador AS winner, s.identificador AS auctionId, s.titulo AS title,
       s.moneda AS currency, prod.identificador AS productId, prod.duenio AS ownerId,
-      i.identificador AS itemId, i.comision AS commission, r.identificador AS receiptId,
-      CASE WHEN r.identificador IS NULL THEN 'pendiente' ELSE 'pagada' END AS paymentStatus,
+      i.identificador AS itemId, i.comision AS commission, p.medio_pago AS paymentMethodId,
+      r.identificador AS receiptId, r.medio_pago AS receiptPaymentMethodId, r.estado_pago AS receiptPaymentStatus,
+      r.direccion_entrega AS deliveryAddress,
+      ? AS shippingCost, (p.importe + i.comision + ?) AS totalDue,
+      COALESCE(r.estado_pago, 'pendiente') AS paymentStatus,
       COALESCE(prod.imagen_uri, s.imagen_uri) AS imageUrl
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
@@ -1351,9 +1603,9 @@ async function getUserPurchases(clienteId) {
      JOIN subastas s ON s.identificador = c.subasta
      JOIN productos prod ON prod.identificador = i.producto
      LEFT JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
-     WHERE a.cliente = ? AND p.ganador = 'si'
+     WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada'
      ORDER BY CASE WHEN r.identificador IS NULL THEN 0 ELSE 1 END, p.identificador DESC`,
-    [clienteId]
+    [SHIPPING_COST, SHIPPING_COST, clienteId]
   );
 }
 
@@ -2100,6 +2352,13 @@ function normalizeEmail(value = '') {
   return email;
 }
 
+function maskEmail(email = '') {
+  const [local = '', domain = ''] = String(email).split('@');
+  if (!local || !domain) return email;
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${'*'.repeat(Math.max(2, local.length - visible.length))}@${domain}`;
+}
+
 function normalizeDocument(value = '') {
   const documentNumber = onlyDigits(value);
 
@@ -2286,6 +2545,11 @@ const port = Number(process.env.API_PORT || 3001);
 
 async function start() {
   if (process.env.DB_AUTO_INIT !== 'false') await initDatabase();
+  setInterval(() => {
+    settleExpiredAuctionTimers().catch((error) => {
+      console.warn(`No se pudo cerrar subastas vencidas: ${error.message}`);
+    });
+  }, 5000);
   app.listen(port, '0.0.0.0', () => {
     console.log(`EliteBid API escuchando en http://0.0.0.0:${port}/api`);
   });

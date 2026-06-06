@@ -25,6 +25,7 @@ export default function ProfileScreen({
   onBack,
   onGoHome,
   onNavigate,
+  onOpenWonBids,
   onOpenPayments,
   onOpenNotifications,
   onOpenPenalties,
@@ -214,7 +215,7 @@ export default function ProfileScreen({
         </View>
 
         <View style={styles.quickActions}>
-          <QuickAction icon="gavel" label="Mis Pujas" />
+          <QuickAction disabled={guest} icon="gavel" label="Mis Pujas" onPress={guest ? undefined : onOpenWonBids} />
           <QuickAction
             disabled={guest}
             icon="credit-card-outline"

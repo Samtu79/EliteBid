@@ -13,21 +13,18 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { login, resendVerificationEmail } from '../backend/authService';
+import { login } from '../backend/authService';
 import ErrorDialog from '../components/ErrorDialog';
 import { colors, radii, shadows } from '../theme';
 
-export default function LoginScreen({ onForgotPassword, onLogin, onRegister }) {
+export default function LoginScreen({ onForgotPassword, onLogin, onRegister, onResendVerification }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [message, setMessage] = useState('');
   const [errorDialog, setErrorDialog] = useState('');
 
   async function handleLogin() {
     setErrorDialog('');
-    setMessage('');
 
     if (!email.trim()) {
       setErrorDialog('Ingresa tu correo para iniciar sesion.');
@@ -47,31 +44,6 @@ export default function LoginScreen({ onForgotPassword, onLogin, onRegister }) {
       setErrorDialog(loginError.message);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleResendCode() {
-    setErrorDialog('');
-    setMessage('');
-
-    if (!email.trim()) {
-      setErrorDialog('Ingresa el correo de la cuenta pendiente para reenviar el codigo.');
-      return;
-    }
-
-    setResending(true);
-
-    try {
-      const result = await resendVerificationEmail(email);
-      setMessage(
-        result.verificationEmailSent
-          ? 'Te reenviamos el codigo de un solo uso.'
-          : 'La cuenta sigue pendiente. Si el mail no llega, revisa SMTP o intenta de nuevo.'
-      );
-    } catch (resendError) {
-      setErrorDialog(resendError.message);
-    } finally {
-      setResending(false);
     }
   }
 
@@ -131,22 +103,29 @@ export default function LoginScreen({ onForgotPassword, onLogin, onRegister }) {
             />
           </View>
 
-          <Pressable onPress={onForgotPassword} style={styles.forgotButton}>
-            <Text style={styles.forgotButtonText}>Olvide mi contrasena</Text>
-          </Pressable>
-
-          <Pressable disabled={resending} onPress={handleResendCode} style={styles.resendButton}>
-            {resending ? (
-              <ActivityIndicator color={colors.primary} size="small" />
-            ) : (
-              <>
-                <MaterialCommunityIcons color={colors.primary} name="email-sync-outline" size={16} />
-                <Text style={styles.resendButtonText}>Reenviar codigo de invitado</Text>
-              </>
-            )}
-          </Pressable>
-
-          {message ? <Text style={styles.message}>{message}</Text> : null}
+          <View style={styles.assistPanel}>
+            <Pressable onPress={onForgotPassword} style={styles.assistAction}>
+              <View style={styles.assistIcon}>
+                <MaterialCommunityIcons color={colors.primary} name="lock-question" size={18} />
+              </View>
+              <View style={styles.assistCopy}>
+                <Text style={styles.assistTitle}>Olvide mi contrasena</Text>
+                <Text style={styles.assistText}>Recupera tu acceso con email o DNI.</Text>
+              </View>
+              <MaterialCommunityIcons color={colors.onSurfaceVariant} name="chevron-right" size={20} />
+            </Pressable>
+            <View style={styles.assistDivider} />
+            <Pressable onPress={onResendVerification} style={styles.assistAction}>
+              <View style={styles.assistIcon}>
+                <MaterialCommunityIcons color={colors.primary} name="email-sync-outline" size={18} />
+              </View>
+              <View style={styles.assistCopy}>
+                <Text style={styles.assistTitle}>Reenviar codigo de invitado</Text>
+                <Text style={styles.assistText}>Valida tu cuenta antes de emitir otro codigo.</Text>
+              </View>
+              <MaterialCommunityIcons color={colors.onSurfaceVariant} name="chevron-right" size={20} />
+            </Pressable>
+          </View>
 
           <Pressable disabled={loading} onPress={handleLogin} style={styles.primaryButton}>
             <LinearGradient
@@ -221,17 +200,51 @@ const styles = StyleSheet.create({
   fieldGroup: {
     marginBottom: 16
   },
-  forgotButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 16,
-    marginTop: -4,
-    paddingVertical: 4
+  assistAction: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
-  forgotButtonText: {
-    color: colors.primary,
+  assistCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  assistDivider: {
+    backgroundColor: 'rgba(147, 143, 156, 0.18)',
+    height: 1,
+    marginHorizontal: 12
+  },
+  assistIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(208, 188, 255, 0.12)',
+    borderRadius: radii.full,
+    height: 36,
+    justifyContent: 'center',
+    width: 36
+  },
+  assistPanel: {
+    backgroundColor: 'rgba(20, 5, 43, 0.34)',
+    borderColor: 'rgba(147, 143, 156, 0.22)',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    marginBottom: 16,
+    marginTop: -2,
+    overflow: 'hidden'
+  },
+  assistText: {
+    color: colors.onSurfaceVariant,
     fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase'
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 2
+  },
+  assistTitle: {
+    color: colors.onSurface,
+    fontSize: 13,
+    fontWeight: '900'
   },
   input: {
     backgroundColor: colors.surfaceHigh,
@@ -273,13 +286,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     overflow: 'hidden'
   },
-  message: {
-    color: '#73E6A2',
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 18,
-    marginBottom: 12
-  },
   primaryButtonFill: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -301,22 +307,6 @@ const styles = StyleSheet.create({
     height: 52,
     justifyContent: 'center',
     marginTop: 12
-  },
-  resendButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 14,
-    marginTop: -4,
-    minHeight: 28,
-    paddingVertical: 3
-  },
-  resendButtonText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase'
   },
   secondaryButtonText: {
     color: colors.primary,

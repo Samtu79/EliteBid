@@ -23,9 +23,9 @@ export async function enterAuctionRoom(clienteId, auctionId) {
   });
 }
 
-export async function placeBid(clienteId, auctionId, rawAmount) {
+export async function placeBid(clienteId, auctionId, rawAmount, paymentMethodId) {
   return apiRequest(`/auctions/${auctionId}/bids`, {
-    body: JSON.stringify({ amount: rawAmount, clienteId }),
+    body: JSON.stringify({ amount: rawAmount, clienteId, paymentMethodId }),
     method: 'POST'
   });
 }
@@ -34,9 +34,20 @@ export async function getUserPurchases(clienteId) {
   return apiRequest(`/users/${clienteId}/purchases`);
 }
 
+export async function getUserPayments(clienteId) {
+  return apiRequest(`/users/${clienteId}/payments`);
+}
+
 export async function settlePurchase(clienteId, bidId) {
   return apiRequest(`/users/${clienteId}/purchases/${bidId}/settle`, {
     method: 'POST'
+  });
+}
+
+export async function savePurchaseDeliveryAddress(clienteId, bidId, deliveryAddress) {
+  return apiRequest(`/users/${clienteId}/purchases/${bidId}/delivery`, {
+    body: JSON.stringify({ deliveryAddress }),
+    method: 'PUT'
   });
 }
 

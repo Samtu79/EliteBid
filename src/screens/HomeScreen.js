@@ -15,7 +15,6 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import {
   getFavoriteAuctionIds,
   getHomeAuctions,
-  getUserSummary,
   toggleFavoriteAuction
 } from '../backend/auctionService';
 import AppToast from '../components/AppToast';
@@ -35,13 +34,11 @@ export default function HomeScreen({
   onNavigate,
   onOpenAuctionDetail,
   onOpenAuctions,
-  onOpenNotifications,
-  onSignOut
+  onOpenNotifications
 }) {
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
   const [favoriteIds, setFavoriteIds] = useState([]);
-  const [summary, setSummary] = useState({ verifiedPayments: 0, totalBids: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -53,16 +50,14 @@ export default function HomeScreen({
   }, []);
 
   async function load() {
-    const [auctions, userSummary, favorites] = await Promise.all([
+    const [auctions, favorites] = await Promise.all([
       getHomeAuctions(user.clienteId),
-      getUserSummary(user.clienteId),
       getFavoriteAuctionIds(user.clienteId)
     ]);
 
     setLiveAuctions(auctions.live);
     setUpcomingAuctions(auctions.upcoming);
     setFavoriteIds(favorites);
-    setSummary(userSummary);
   }
 
   useEffect(() => {
@@ -106,9 +101,6 @@ export default function HomeScreen({
             <Pressable onPress={onOpenNotifications} style={styles.iconButton}>
               <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={22} />
             </Pressable>
-            <Pressable onPress={onSignOut} style={styles.iconButton}>
-              <MaterialCommunityIcons color={colors.onSurfaceVariant} name="logout" size={22} />
-            </Pressable>
           </View>
         </View>
 
@@ -130,11 +122,6 @@ export default function HomeScreen({
             placeholderTextColor="rgba(201, 196, 211, 0.52)"
             style={styles.searchInput}
           />
-        </View>
-
-        <View style={styles.statsRow}>
-          <MetricCard label="Medios verificados" value={summary.verifiedPayments} />
-          <MetricCard label="Pujas realizadas" value={summary.totalBids} />
         </View>
 
         <SectionHeader action="Ver todas" onAction={onOpenAuctions} title="Subastas abiertas" />
@@ -192,15 +179,6 @@ function SectionHeader({ action, onAction, title }) {
   );
 }
 
-function MetricCard({ label, value }) {
-  return (
-    <View style={styles.metricCard}>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
-  );
-}
-
 function AuctionCard({ auction, isFavorite, onPress, onToggleFavorite }) {
   const priceAvailable = auction.currentBid != null;
 
@@ -215,6 +193,9 @@ function AuctionCard({ auction, isFavorite, onPress, onToggleFavorite }) {
         <View style={styles.liveChip}>
           <MaterialCommunityIcons color={colors.error} name="clock-outline" size={14} />
           <Text style={styles.liveChipText}>En vivo</Text>
+        </View>
+        <View style={styles.categoryChip}>
+          <Text style={styles.categoryChipText}>{categoryLabel[auction.category] ?? auction.category}</Text>
         </View>
         <Pressable
           onPress={(event) => {
@@ -362,6 +343,25 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     lineHeight: 23
   },
+  categoryChip: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(204, 193, 255, 0.18)',
+    borderColor: 'rgba(204, 193, 255, 0.28)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    bottom: 40,
+    left: 12,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    position: 'absolute'
+  },
+  categoryChipText: {
+    color: colors.onSurface,
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 26,
+    textTransform: 'uppercase'
+  },
   container: {
     backgroundColor: colors.surfaceLowest,
     flex: 1
@@ -504,26 +504,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase'
   },
-  metricCard: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: 'rgba(72, 69, 81, 0.26)',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    flex: 1,
-    padding: 16
-  },
-  metricLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 16,
-    marginTop: 4
-  },
-  metricValue: {
-    color: colors.primary,
-    fontSize: 24,
-    fontWeight: '900'
-  },
   searchBox: {
     alignItems: 'center',
     backgroundColor: colors.surfaceHighest,
@@ -558,11 +538,6 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '900',
     letterSpacing: 0
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16
   },
   userName: {
     color: colors.onSurface,

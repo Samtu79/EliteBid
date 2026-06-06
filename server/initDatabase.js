@@ -62,6 +62,48 @@ async function migrateSecuritySchema() {
     'verification_code_expires_at',
     'ALTER TABLE usuarios ADD COLUMN verification_code_expires_at DATETIME'
   );
+  await addColumnIfMissing(
+    'items_catalogo',
+    'timer_inicio',
+    'ALTER TABLE items_catalogo ADD COLUMN timer_inicio DATETIME AFTER puja_actual'
+  );
+  await addColumnIfMissing(
+    'items_catalogo',
+    'timer_vencimiento',
+    'ALTER TABLE items_catalogo ADD COLUMN timer_vencimiento DATETIME AFTER timer_inicio'
+  );
+  await addColumnIfMissing(
+    'items_catalogo',
+    'cierre_estado',
+    "ALTER TABLE items_catalogo ADD COLUMN cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja' AFTER timer_vencimiento"
+  );
+  await run("ALTER TABLE items_catalogo MODIFY cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja'");
+  await addColumnIfMissing(
+    'items_catalogo',
+    'cierre_motivo',
+    'ALTER TABLE items_catalogo ADD COLUMN cierre_motivo VARCHAR(80) AFTER cierre_estado'
+  );
+  await addColumnIfMissing(
+    'pujos',
+    'medio_pago',
+    'ALTER TABLE pujos ADD COLUMN medio_pago INT AFTER item'
+  );
+  await addColumnIfMissing(
+    'registro_de_subasta',
+    'medio_pago',
+    'ALTER TABLE registro_de_subasta ADD COLUMN medio_pago INT AFTER cliente'
+  );
+  await addColumnIfMissing(
+    'registro_de_subasta',
+    'estado_pago',
+    "ALTER TABLE registro_de_subasta ADD COLUMN estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente' AFTER comision"
+  );
+  await run("ALTER TABLE registro_de_subasta MODIFY estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente'");
+  await addColumnIfMissing(
+    'registro_de_subasta',
+    'direccion_entrega',
+    'ALTER TABLE registro_de_subasta ADD COLUMN direccion_entrega VARCHAR(255) AFTER estado_pago'
+  );
 
   const legacyUsers = await query(
     "SELECT id, password FROM usuarios WHERE password NOT LIKE 'scrypt$%'"
@@ -116,6 +158,16 @@ async function seedDatabase() {
     `INSERT IGNORE INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
      VALUES (?, ?, ?, ?, ?)`,
     [1, 32, 'si', 'platino', 2]
+  );
+  await run(
+    `INSERT IGNORE INTO personas (identificador, documento, nombre, direccion, estado)
+     VALUES (?, ?, ?, ?, ?)`,
+    [900001, '00000000', 'Empresa EliteBid', 'Av. Alvear 1800, CABA', 'activo']
+  );
+  await run(
+    `INSERT IGNORE INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
+     VALUES (?, ?, ?, ?, ?)`,
+    [900001, 32, 'si', 'platino', 2]
   );
   await run("UPDATE clientes SET categoria = 'platino' WHERE identificador = ?", [1]);
   await run(

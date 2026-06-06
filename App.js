@@ -16,8 +16,10 @@ import PenaltiesScreen from './src/screens/PenaltiesScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import PurchasesScreen from './src/screens/PurchasesScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import ResendVerificationScreen from './src/screens/ResendVerificationScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import VerifyAccountScreen from './src/screens/VerifyAccountScreen';
+import WonBidsScreen from './src/screens/WonBidsScreen';
 import { colors } from './src/theme';
 
 const splashImage = require('./assets/splash.png');
@@ -204,7 +206,6 @@ export default function App() {
             onOpenAuctionDetail={openAuctionDetail}
             onOpenAuctions={() => setAppView('auctions')}
             onOpenNotifications={() => openNotifications('home')}
-            onSignOut={handleSignOut}
             user={user}
           />
         )
@@ -249,10 +250,13 @@ export default function App() {
           onOpenPayments={() => openPayments('profile')}
           onOpenNotifications={() => openNotifications('profile')}
           onOpenPenalties={() => setAppView('penalties')}
+          onOpenWonBids={() => setAppView('wonBids')}
           onSignOut={handleSignOut}
           onUserUpdated={setUser}
           user={user}
         />
+      ) : user && appView === 'wonBids' ? (
+        <WonBidsScreen onBack={() => setAppView('profile')} onNavigate={navigateTab} user={user} />
       ) : user && appView === 'penalties' ? (
         <PenaltiesScreen onBack={() => setAppView(notificationsBackView === 'notifications' ? 'notifications' : 'profile')} user={user} />
       ) : user && appView === 'notifications' ? (
@@ -299,7 +303,6 @@ export default function App() {
           onOpenAuctionDetail={openAuctionDetail}
           onOpenAuctions={() => setAppView('auctions')}
           onOpenNotifications={() => openNotifications('home')}
-          onSignOut={handleSignOut}
           user={user}
         />
       ) : authView === 'register' ? (
@@ -314,11 +317,14 @@ export default function App() {
         />
       ) : authView === 'reset' ? (
         <ResetPasswordScreen onBack={() => setAuthView('login')} />
+      ) : authView === 'resendVerification' ? (
+        <ResendVerificationScreen onBack={() => setAuthView('login')} />
       ) : (
         <LoginScreen
           onForgotPassword={() => setAuthView('reset')}
           onLogin={handleAuthenticated}
           onRegister={() => setAuthView('register')}
+          onResendVerification={() => setAuthView('resendVerification')}
         />
       )}
     </>
