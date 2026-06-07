@@ -27,6 +27,20 @@ npm run web
 npm run web -- --port 3002
 ```
 
+Para usar Expo Go en un iPhone fisico, la API no puede apuntar a `127.0.0.1` porque eso seria el propio telefono. En `.env`, configurar la IP Wi-Fi de la PC:
+
+```text
+EXPO_PUBLIC_WEB_API_URL=http://127.0.0.1:3001/api
+EXPO_PUBLIC_MOBILE_API_URL=http://TU_IP_LAN:3001/api
+```
+
+Despues reiniciar Expo para que vuelva a leer las variables:
+
+```bash
+npm run api
+npm run start -- --clear
+```
+
 ## Usuario de prueba
 
 ```text

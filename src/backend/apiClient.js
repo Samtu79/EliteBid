@@ -1,6 +1,8 @@
 import { NativeModules, Platform } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001/api';
+const WEB_API_URL = process.env.EXPO_PUBLIC_WEB_API_URL || API_URL;
+const MOBILE_API_URL = process.env.EXPO_PUBLIC_MOBILE_API_URL || '';
 const TOKEN_KEY = 'elitebid.sessionToken';
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0', '::1'];
 
@@ -60,10 +62,10 @@ export async function apiRequest(path, options = {}) {
 
 function resolveApiUrl() {
   if (Platform.OS === 'web') {
-    return API_URL;
+    return normalizeApiUrl(WEB_API_URL);
   }
 
-  const configuredUrl = API_URL.replace(/\/$/, '');
+  const configuredUrl = normalizeApiUrl(MOBILE_API_URL || API_URL);
   const configuredHost = getHostFromUrl(configuredUrl);
 
   if (configuredHost && !isLocalHost(configuredHost)) {
@@ -79,6 +81,10 @@ function resolveApiUrl() {
   }
 
   return configuredUrl;
+}
+
+function normalizeApiUrl(url) {
+  return String(url || '').replace(/\/$/, '');
 }
 
 function getHostFromUrl(url) {
