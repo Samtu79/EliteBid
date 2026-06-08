@@ -18,7 +18,7 @@ import ErrorDialog from '../components/ErrorDialog';
 import { colors, radii, shadows } from '../theme';
 
 export default function LoginScreen({ onForgotPassword, onLogin, onRegister, onResendVerification }) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,8 +27,8 @@ export default function LoginScreen({ onForgotPassword, onLogin, onRegister, onR
   async function handleLogin() {
     setErrorDialog('');
 
-    if (!email.trim()) {
-      setErrorDialog('Ingresa tu correo para iniciar sesion.');
+    if (!identifier.trim()) {
+      setErrorDialog('Ingresa tu correo o documento para iniciar sesion.');
       return;
     }
     if (!password.trim()) {
@@ -39,7 +39,7 @@ export default function LoginScreen({ onForgotPassword, onLogin, onRegister, onR
     setLoading(true);
 
     try {
-      const user = await login(email, password);
+      const user = await login(identifier, password);
       onLogin(user);
     } catch (loginError) {
       setErrorDialog(loginError.message);
@@ -79,16 +79,16 @@ export default function LoginScreen({ onForgotPassword, onLogin, onRegister, onR
           </Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Correo</Text>
+            <Text style={styles.label}>Correo o documento</Text>
             <TextInput
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
-              onChangeText={setEmail}
-              placeholder="tu@email.com"
+              onChangeText={setIdentifier}
+              placeholder="tu@email.com o DNI/Pasaporte"
               placeholderTextColor="rgba(201, 196, 211, 0.55)"
               style={styles.input}
-              value={email}
+              value={identifier}
             />
           </View>
 

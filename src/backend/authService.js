@@ -1,8 +1,8 @@
 import { apiRequest, setSessionToken } from './apiClient';
 
-export async function login(email, password) {
+export async function login(identifier, password) {
   const user = await apiRequest('/auth/login', {
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
     method: 'POST'
   });
   setSessionToken(user.sessionToken);

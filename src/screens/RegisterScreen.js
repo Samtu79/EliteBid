@@ -46,17 +46,25 @@ export default function RegisterScreen({ onBack, onRegistered }) {
     }));
   }
 
-  async function pickDocument(side) {
+  async function pickDocument(side, source = 'library') {
     setErrorDialog('');
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      setErrorDialog('Necesitamos permiso para seleccionar la foto del documento.');
+      setErrorDialog(
+        source === 'camera'
+          ? 'Necesitamos permiso para abrir la camara.'
+          : 'Necesitamos permiso para seleccionar la foto del documento.'
+      );
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const picker = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    const result = await picker({
       allowsEditing: true,
       base64: Platform.OS === 'web',
       mediaTypes: ['images'],
@@ -243,14 +251,16 @@ function PersonalStep({ form, pickDocument, updateField }) {
             done={Boolean(form.documentFrontUri)}
             icon="badge-account-horizontal-outline"
             label={form.documentType === 'dni' ? 'Frente' : 'Pasaporte'}
-            onPress={() => pickDocument('frente')}
+            onPickCamera={() => pickDocument('frente', 'camera')}
+            onPickLibrary={() => pickDocument('frente', 'library')}
           />
           {form.documentType === 'dni' ? (
             <DocumentButton
               done={Boolean(form.documentBackUri)}
               icon="credit-card-outline"
               label="Dorso"
-              onPress={() => pickDocument('dorso')}
+              onPickCamera={() => pickDocument('dorso', 'camera')}
+              onPickLibrary={() => pickDocument('dorso', 'library')}
             />
           ) : null}
         </View>
@@ -281,13 +291,23 @@ function Field({ inputStyle, label, style, ...props }) {
   );
 }
 
-function DocumentButton({ done, icon, label, onPress }) {
+function DocumentButton({ done, icon, label, onPickCamera, onPickLibrary }) {
   return (
-    <Pressable onPress={onPress} style={[styles.documentButton, done && styles.documentDone]}>
+    <View style={[styles.documentButton, done && styles.documentDone]}>
       <MaterialCommunityIcons color={colors.primary} name={done ? 'check-circle' : icon} size={30} />
       <Text style={styles.documentLabel}>{label}</Text>
       <Text style={styles.documentAction}>{done ? 'Cargado' : 'Subir foto'}</Text>
-    </Pressable>
+      <View style={styles.documentActions}>
+        <Pressable onPress={onPickCamera} style={styles.documentActionButton}>
+          <MaterialCommunityIcons color={colors.primary} name="camera-outline" size={17} />
+          <Text style={styles.documentActionButtonText}>Camara</Text>
+        </Pressable>
+        <Pressable onPress={onPickLibrary} style={styles.documentActionButton}>
+          <MaterialCommunityIcons color={colors.primary} name="image-outline" size={17} />
+          <Text style={styles.documentActionButtonText}>Galeria</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -321,6 +341,30 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
+  documentActionButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(147, 143, 156, 0.32)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+    height: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 6
+  },
+  documentActionButtonText: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  documentActions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+    width: '100%'
+  },
   documentButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceLow,
@@ -329,7 +373,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     gap: 6,
-    minHeight: 126,
+    minHeight: 158,
     justifyContent: 'center',
     padding: 14
   },
