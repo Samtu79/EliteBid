@@ -35,8 +35,7 @@ export default function HomeScreen({
   onNavigate,
   onOpenAuctionDetail,
   onOpenAuctions,
-  onOpenNotifications,
-  onSignOut
+  onOpenNotifications
 }) {
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
@@ -153,10 +152,6 @@ export default function HomeScreen({
             <Pressable onPress={onCreateAccount} style={styles.guestPrimaryButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="account-plus-outline" size={18} />
               <Text style={styles.guestPrimaryText}>Crear cuenta</Text>
-            </Pressable>
-            <Pressable onPress={onSignOut} style={styles.guestSecondaryButton}>
-              <MaterialCommunityIcons color={colors.primary} name="logout" size={18} />
-              <Text style={styles.guestSecondaryText}>Salir</Text>
             </Pressable>
           </View>
         ) : null}

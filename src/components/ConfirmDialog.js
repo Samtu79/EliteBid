@@ -12,6 +12,7 @@ export default function ConfirmDialog({
   message,
   onCancel,
   onConfirm,
+  onSecondary,
   title,
   visible
 }) {
@@ -32,7 +33,7 @@ export default function ConfirmDialog({
           <View style={styles.actions}>
             <Pressable
               disabled={loading}
-              onPress={onCancel}
+              onPress={onSecondary || onCancel}
               style={[styles.secondaryButton, loading && styles.disabledButton]}
             >
               <Text style={styles.secondaryText}>{cancelLabel}</Text>

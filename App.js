@@ -5,6 +5,7 @@ import { initDatabase } from './src/backend/database';
 import { getActiveSession, signOut } from './src/backend/authService';
 import { getInitialNetworkStatus, subscribeNetworkStatus } from './src/backend/networkStatus';
 import { notifyOfflineConnection } from './src/backend/offlineNotificationService';
+import ConfirmDialog from './src/components/ConfirmDialog';
 import AddPaymentScreen from './src/screens/AddPaymentScreen';
 import AuctionDetailScreen from './src/screens/AuctionDetailScreen';
 import AuctionsScreen from './src/screens/AuctionsScreen';
@@ -46,6 +47,8 @@ export default function App() {
   const [notificationsBackView, setNotificationsBackView] = useState('home');
   const [paymentBackView, setPaymentBackView] = useState('home');
   const [selectedAuctionId, setSelectedAuctionId] = useState(null);
+  const [guestAccessDialogVisible, setGuestAccessDialogVisible] = useState(false);
+  const [guestAccessTarget, setGuestAccessTarget] = useState('esta seccion');
   const [online, setOnline] = useState(getInitialNetworkStatus);
   const previousOnlineRef = useRef(true);
 
@@ -133,7 +136,14 @@ export default function App() {
   }
 
   function navigateTab(tab) {
-    if (user?.guestMode && ['favorites', 'purchases', 'profile'].includes(tab)) {
+    const guestOnlyTabs = {
+      favorites: 'Favoritos',
+      purchases: 'Mis ventas',
+      profile: 'Perfil'
+    };
+
+    if (user?.guestMode && guestOnlyTabs[tab]) {
+      requestGuestAccess(guestOnlyTabs[tab]);
       return;
     }
 
@@ -155,12 +165,17 @@ export default function App() {
   }
 
   function openLiveRoom(auctionId) {
+    if (user?.guestMode) {
+      requestGuestAccess('la sala de subasta');
+      return;
+    }
     setSelectedAuctionId(auctionId);
     setAppView('liveRoom');
   }
 
   function openNotifications(fromView = appView || 'home') {
     if (user?.guestMode) {
+      requestGuestAccess('las notificaciones');
       return;
     }
 
@@ -178,6 +193,18 @@ export default function App() {
     setUser(null);
     setAppView('home');
     setAuthView('register');
+  }
+
+  function requestGuestAccess(target) {
+    setGuestAccessTarget(target);
+    setGuestAccessDialogVisible(true);
+  }
+
+  function loginFromGuest() {
+    setGuestAccessDialogVisible(false);
+    setUser(null);
+    setAppView('home');
+    setAuthView('login');
   }
 
   function handleNotificationAction(result) {
@@ -339,6 +366,7 @@ export default function App() {
           onBack={() => setAppView(detailBackView)}
           onEnterRoom={openLiveRoom}
           onOpenNotifications={() => openNotifications('auctionDetail')}
+          onRequireAccount={() => requestGuestAccess('la sala de subasta')}
           onNavigate={navigateTab}
           user={user}
         />
@@ -383,6 +411,20 @@ export default function App() {
           onResendVerification={() => setAuthView('resendVerification')}
         />
       )}
+      <ConfirmDialog
+        cancelLabel="Iniciar sesion"
+        confirmLabel="Crear cuenta"
+        icon="account-plus-outline"
+        message={`Estas explorando como invitado. Para acceder a ${guestAccessTarget}, crea una cuenta o inicia sesion.`}
+        onCancel={() => setGuestAccessDialogVisible(false)}
+        onConfirm={() => {
+          setGuestAccessDialogVisible(false);
+          registerFromGuest();
+        }}
+        onSecondary={loginFromGuest}
+        title="Seguis como invitado"
+        visible={guestAccessDialogVisible}
+      />
     </>
   );
 }

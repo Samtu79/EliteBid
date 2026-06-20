@@ -16,7 +16,7 @@ const categoryLabel = {
   platino: 'Platino'
 };
 
-export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, onNavigate, onOpenNotifications, user }) {
+export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, onNavigate, onOpenNotifications, onRequireAccount, user }) {
   const [auction, setAuction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -66,6 +66,11 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
   }, [auction]);
 
   async function joinRoom() {
+    if (user?.guestMode) {
+      onRequireAccount?.();
+      return;
+    }
+
     setError('');
     setJoining(true);
 
@@ -245,7 +250,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Pressable
-            disabled={!canJoin}
+            disabled={!canJoin && !publicGuest}
             onPress={joinRoom}
             style={[styles.primaryButton, !canJoin && styles.primaryButtonDisabled]}
           >
