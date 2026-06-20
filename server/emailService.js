@@ -54,6 +54,7 @@ async function sendMail({ to, subject, content, fallbackLog }) {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASSWORD
       },
+      family: Number(process.env.SMTP_FAMILY || 4),
       connectionTimeout: Number(process.env.SMTP_TIMEOUT_MS || 20000),
       greetingTimeout: Number(process.env.SMTP_TIMEOUT_MS || 20000),
       socketTimeout: Number(process.env.SMTP_TIMEOUT_MS || 20000)

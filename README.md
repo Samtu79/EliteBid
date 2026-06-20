@@ -72,6 +72,7 @@ APP_PUBLIC_URL=http://127.0.0.1:3001
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
+SMTP_FAMILY=4
 SMTP_TIMEOUT_MS=15000
 MAIL_USER=sdnxdxd@gmail.com
 MAIL_PASSWORD=clave_o_app_password
