@@ -13,8 +13,9 @@ const app = express();
 const SESSION_DAYS = 7;
 const BID_TIMER_SECONDS = 60;
 const FIRST_BID_TIMER_SECONDS = 3 * 60;
+const COMPANY_CLIENT_ID = 4;
 const SHIPPING_COST = 25000;
-const MAX_BID_LIMIT_CATEGORIES = new Set(['bronce', 'comun', 'plata']);
+const BID_RANGE_LIMIT_CATEGORIES = new Set(['comun', 'especial', 'plata']);
 const categoryRank = { comun: 1, especial: 2, plata: 3, oro: 4, platino: 5 };
 const categoryRequirements = [
   {
@@ -1713,39 +1714,37 @@ async function finalizeAuctionItem(itemId) {
     [itemId]
   );
 
-  const buyerClientId = lastBid?.clienteId ?? null;
-  const amount = Number(lastBid?.amount ?? 0);
+  const buyerClientId = lastBid?.clienteId ?? COMPANY_CLIENT_ID;
+  const amount = Number(lastBid?.amount ?? item.basePrice);
   const paymentMethodId = lastBid?.paymentMethodId ?? null;
-  const reason = lastBid ? 'adjudicada_por_tiempo' : 'sin_ofertas';
+  const reason = lastBid ? 'adjudicada_por_tiempo' : 'compra_empresa_sin_pujas';
 
   if (lastBid) {
     await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', itemId]);
     await run('UPDATE pujos SET ganador = ? WHERE identificador = ?', ['si', lastBid.bidId]);
   }
 
-  if (lastBid) {
-    const receipt = await first(
-      `SELECT identificador AS id
-       FROM registro_de_subasta
-       WHERE subasta = ? AND producto = ?
-       LIMIT 1`,
-      [item.auctionId, item.productId]
-    );
+  const receipt = await first(
+    `SELECT identificador AS id
+     FROM registro_de_subasta
+     WHERE subasta = ? AND producto = ?
+     LIMIT 1`,
+    [item.auctionId, item.productId]
+  );
 
-    if (!receipt) {
-      await run(
-        `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, 'pendiente']
-      );
-    }
+  if (!receipt) {
+    await run(
+      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, 'pendiente']
+    );
   }
 
   await run(
     `UPDATE items_catalogo
      SET subastado = ?, cierre_estado = 'finalizada', cierre_motivo = ?
      WHERE identificador = ?`,
-    [lastBid ? 'si' : 'no', reason, itemId]
+    ['si', reason, itemId]
   );
   await ensureActiveAuctionItem(item.auctionId);
 
@@ -1788,14 +1787,14 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   }
   const currentBid = Number(detail.currentBid || detail.basePrice || 0);
   const basePrice = Number(detail.basePrice || 0);
+  const hasBidRangeLimit = BID_RANGE_LIMIT_CATEGORIES.has(String(detail.category || '').toLowerCase());
   const minBid = currentBid + basePrice * 0.01;
   const maxBid = currentBid + basePrice * 0.2;
-  const hasMaxBidLimit = MAX_BID_LIMIT_CATEGORIES.has(String(detail.category || '').toLowerCase());
 
   if (amount <= currentBid) throw new Error(`El monto debe superar la puja actual de ${formatMoney(currentBid)}.`);
-  if (amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
-  if (hasMaxBidLimit && amount > maxBid) {
-    throw new Error(`Para categorias bronce y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
+  if (hasBidRangeLimit && amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
+  if (hasBidRangeLimit && amount > maxBid) {
+    throw new Error(`Para categorias comun, especial y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
   }
 
   const resolvedPaymentId = await resolveBidPayment(clienteId, paymentMethodId, amount);
@@ -1820,7 +1819,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   return {
     auction: await getAuctionDetail(auctionId, clienteId),
     bid: { id: result.insertId, amount },
-    bounds: { min: minBid, max: hasMaxBidLimit ? maxBid : null }
+    bounds: { min: hasBidRangeLimit ? minBid : currentBid + 1, max: hasBidRangeLimit ? maxBid : null }
   };
 }
 

@@ -19,7 +19,7 @@ import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import { colors, radii } from '../theme';
 
 const SHIPPING_COST = 25000;
-const MAX_BID_LIMIT_CATEGORIES = new Set(['bronce', 'comun', 'plata']);
+const BID_RANGE_LIMIT_CATEGORIES = new Set(['comun', 'especial', 'plata']);
 
 export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpenNotifications, user }) {
   const [auction, setAuction] = useState(null);
@@ -122,15 +122,15 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     const currentBid = Number(auction.currentBid || auction.basePrice || 0);
     const basePrice = Number(auction.basePrice || 0);
     const bidStep = Math.max(100, Math.ceil((basePrice * 0.01) / 100) * 100);
-    const minBid = currentBid + basePrice * 0.01;
+    const hasBidRangeLimit = BID_RANGE_LIMIT_CATEGORIES.has(String(auction.category || '').toLowerCase());
+    const minBid = hasBidRangeLimit ? currentBid + basePrice * 0.01 : currentBid + 1;
     const maxBid = currentBid + basePrice * 0.2;
-    const hasMaxBidLimit = MAX_BID_LIMIT_CATEGORIES.has(String(auction.category || '').toLowerCase());
 
     return {
       bidStep,
-      canBypassRange: !hasMaxBidLimit,
+      canBypassRange: !hasBidRangeLimit,
       currentBid,
-      hasMaxBidLimit,
+      hasBidRangeLimit,
       maxBid,
       minBid,
       typedAmount: parseCurrency(amount)
@@ -400,9 +400,9 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               {rules.canBypassRange ? 'Rango flexible' : `Max. ${formatMoney(rules.maxBid)}`}
             </Text>
           </View>
-          {rules.hasMaxBidLimit ? (
+          {rules.hasBidRangeLimit ? (
             <Text style={styles.rangeHint}>
-              Tope para bronce/plata: ultima oferta + 20% del valor base.
+              Limites para comun, especial y plata: ultima oferta + 1% a 20% del valor base.
             </Text>
           ) : null}
 
@@ -495,13 +495,13 @@ function formatCountdown(seconds) {
 }
 
 function getClosureCopy(auction) {
-  if (auction.closure?.reason === 'sin_ofertas') return 'Sin ofertas';
+  if (auction.closure?.reason === 'compra_empresa_sin_pujas') return 'Compra empresa';
   return auction.closure?.winner?.bidderAlias ?? 'Finalizada';
 }
 
 function getFinalResultText(auction) {
-  if (auction.closure?.reason === 'sin_ofertas') {
-    return 'No se recibieron ofertas para este objeto dentro del plazo establecido.';
+  if (auction.closure?.reason === 'compra_empresa_sin_pujas') {
+    return `No se recibieron ofertas dentro del plazo. La empresa compra el objeto por el valor base de ${formatMoney(auction.basePrice)}.`;
   }
   if (auction.closure?.winner?.isCurrentUser) {
     const amount = auction.closure.winner.amount;

@@ -303,7 +303,24 @@ async function seedDatabase() {
     image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
     product: 'Conjunto de monedas argentinas y medallas con catalogacion basica.',
     basePrice: 120000,
-    currentBid: 132000
+    currentBid: 132000,
+    extraItems: [
+      {
+        product: 'Moneda de 8 escudos de oro, Rio de la Plata, 1828.',
+        image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
+        basePrice: 185000
+      },
+      {
+        product: 'Medalla conmemorativa de plata, Exposicion Nacional 1882.',
+        image: 'https://images.unsplash.com/photo-1644424235476-295f24d503d9?auto=format&fit=crop&w=900&q=80',
+        basePrice: 95000
+      },
+      {
+        product: 'Billete argentino de coleccion, serie historica sin circular.',
+        image: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?auto=format&fit=crop&w=900&q=80',
+        basePrice: 70000
+      }
+    ]
   });
   await seedAuction({
     id: 5,
