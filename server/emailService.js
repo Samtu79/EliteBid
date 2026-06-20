@@ -46,6 +46,10 @@ async function sendPasswordResetEmail({ to, name, token }) {
 }
 
 async function sendMail({ to, subject, content, fallbackLog }) {
+  if (process.env.RESEND_API_KEY) {
+    return sendWithResend({ to, subject, content });
+  }
+
   if (hasSmtpConfig()) {
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -71,10 +75,6 @@ async function sendMail({ to, subject, content, fallbackLog }) {
     });
 
     return { sent: true, skipped: false, provider: 'smtp', id: info.messageId };
-  }
-
-  if (process.env.RESEND_API_KEY) {
-    return sendWithResend({ to, subject, content });
   }
 
   console.warn(fallbackLog);
