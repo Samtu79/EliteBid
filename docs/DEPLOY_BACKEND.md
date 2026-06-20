@@ -17,6 +17,16 @@ Objetivo: dejar la API de EliteBid accesible en una URL publica para probar endp
 
 Esta combinacion deja una URL publica para el backend y una base MySQL remota para que la app y Postman prueben endpoints fuera de la PC local.
 
+## Cambios realizados para esta fase
+
+- El backend acepta `PORT`, requerido por Render, y mantiene `API_PORT` para uso local.
+- La conexion MySQL acepta variables `DB_*` y tambien variables `MYSQL_ADDON_*` de Clever Cloud.
+- Se agrego `DB_CREATE_DATABASE=false` para usar bases online donde el esquema ya existe y no se permite crear databases.
+- Se agrego soporte opcional de SSL con `DB_SSL=true`.
+- Se agrego `render.yaml` para que Render sepa como instalar, iniciar y validar la API.
+- Se documento el paso a paso de deploy y las variables requeridas.
+- Se mantuvo `.env` fuera de Git; las credenciales se cargan solo como variables privadas en Render.
+
 ## Clever Cloud MySQL
 
 Si la base es Clever Cloud, se pueden cargar directamente estas variables en Render:
