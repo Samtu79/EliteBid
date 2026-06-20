@@ -92,6 +92,10 @@ Si no hay SMTP ni `RESEND_API_KEY`, el registro no falla: el backend deja la cue
 
 En Render, las variables de correo se cargan en el servicio backend en **Environment**; el archivo `.env` de la PC no se publica. Configura `MAIL_USER` y `MAIL_PASSWORD` como secretos junto con los valores SMTP anteriores.
 
+Si Render no puede alcanzar el SMTP, configura `RESEND_API_KEY`. Cuando existe, EliteBid usa Resend por HTTPS antes que SMTP.
+
+Como alternativa sin dominio propio, Brevo permite verificar una casilla Gmail como remitente y enviar por HTTPS. Configura `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` y opcionalmente `BREVO_SENDER_NAME`; si existe esa clave, EliteBid usa Brevo antes que Resend y SMTP.
+
 ```bash
 curl -X POST http://127.0.0.1:3001/api/auth/resend-verification -H "Content-Type: application/json" -d "{\"email\":\"usuario@mail.com\"}"
 ```

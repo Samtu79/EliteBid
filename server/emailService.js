@@ -46,6 +46,10 @@ async function sendPasswordResetEmail({ to, name, token }) {
 }
 
 async function sendMail({ to, subject, content, fallbackLog }) {
+  if (process.env.BREVO_API_KEY) {
+    return sendWithBrevo({ to, subject, content });
+  }
+
   if (process.env.RESEND_API_KEY) {
     return sendWithResend({ to, subject, content });
   }
@@ -103,12 +107,43 @@ function hasSmtpConfig() {
   return Boolean(process.env.SMTP_HOST && process.env.MAIL_USER && process.env.MAIL_PASSWORD);
 }
 
+async function sendWithBrevo({ to, subject, content }) {
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.MAIL_USER;
+  const senderName = process.env.BREVO_SENDER_NAME || 'EliteBid';
+
+  if (!senderEmail) {
+    throw new Error('Configura BREVO_SENDER_EMAIL con el remitente verificado en Brevo.');
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    body: JSON.stringify({
+      sender: { email: senderEmail, name: senderName },
+      to: [{ email: to }],
+      subject,
+      htmlContent: content.html,
+      textContent: content.text
+    }),
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json'
+    },
+    method: 'POST'
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.message || payload.code || 'Brevo no pudo enviar el email.');
+  }
+
+  return { sent: true, skipped: false, provider: 'brevo', id: payload.messageId };
+}
+
 function lookupSmtpIpv4(hostname, _options, callback) {
   dns.lookup(hostname, { family: 4, all: false }, callback);
 }
 
 function hasEmailProviderConfig() {
-  return hasSmtpConfig() || Boolean(process.env.RESEND_API_KEY);
+  return hasSmtpConfig() || Boolean(process.env.RESEND_API_KEY) || Boolean(process.env.BREVO_API_KEY);
 }
 
 function buildVerificationContent({ name, code }) {
