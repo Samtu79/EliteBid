@@ -19,6 +19,7 @@ import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import { colors, radii } from '../theme';
 
 const SHIPPING_COST = 25000;
+const MAX_BID_LIMIT_CATEGORIES = new Set(['bronce', 'comun', 'plata']);
 
 export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpenNotifications, user }) {
   const [auction, setAuction] = useState(null);
@@ -123,11 +124,13 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     const bidStep = Math.max(100, Math.ceil((basePrice * 0.01) / 100) * 100);
     const minBid = currentBid + basePrice * 0.01;
     const maxBid = currentBid + basePrice * 0.2;
+    const hasMaxBidLimit = MAX_BID_LIMIT_CATEGORIES.has(String(auction.category || '').toLowerCase());
 
     return {
       bidStep,
-      canBypassRange: ['oro', 'platino'].includes(auction.category),
+      canBypassRange: !hasMaxBidLimit,
       currentBid,
+      hasMaxBidLimit,
       maxBid,
       minBid,
       typedAmount: parseCurrency(amount)
@@ -384,6 +387,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               {rules.canBypassRange ? 'Rango flexible' : `Max. ${formatMoney(rules.maxBid)}`}
             </Text>
           </View>
+          {rules.hasMaxBidLimit ? (
+            <Text style={styles.rangeHint}>
+              Tope para bronce/plata: ultima oferta + 20% del valor base.
+            </Text>
+          ) : null}
 
           <Pressable
             disabled={bidDisabled}
@@ -835,6 +843,14 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     fontSize: 11,
     fontWeight: '800'
+  },
+  rangeHint: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 6,
+    textAlign: 'center'
   },
   roomPill: {
     alignItems: 'center',

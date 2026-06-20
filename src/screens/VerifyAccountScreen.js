@@ -23,7 +23,7 @@ export default function VerifyAccountScreen({ onContinueAsGuest, onVerified, use
           </Text>
           <Text style={styles.copy}>
             {emailSent
-              ? 'Tu cuenta ya fue aceptada por la empresa. Ingresalo para verificar el email, crear tu contrasena y activar todas las funciones.'
+              ? 'Ingresalo para verificar que el email te pertenece y crear tu contrasena. La aceptacion de la cuenta se informa despues en otro mail.'
               : 'No pudimos enviar el mail todavia. Revisa la configuracion SMTP o toca reenviar codigo.'}
           </Text>
           <View style={styles.mailPill}>

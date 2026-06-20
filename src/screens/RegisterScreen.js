@@ -141,7 +141,7 @@ export default function RegisterScreen({ onBack, onRegistered }) {
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.progressBlock}>
-          <Text style={styles.progressLabel}>VERIFICACION DE CUENTA</Text>
+          <Text style={styles.progressLabel}>VERIFICACION DE EMAIL</Text>
           <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: '100%' }]} />
           </View>
@@ -188,7 +188,7 @@ function PersonalStep({ form, pickDocument, updateField }) {
       <View style={styles.verifiedBox}>
         <MaterialCommunityIcons color={colors.primaryContainer} name="email-fast-outline" size={26} />
         <Text style={styles.verifiedText}>
-          Primero recibis el mail de aceptacion de la empresa y despues un codigo para verificar tu email. Mientras tanto vas a entrar como invitado.
+          Te enviamos un codigo para confirmar que el mail te pertenece. La validacion de la cuenta llega despues en otro correo, aceptada o rechazada por la empresa.
         </Text>
       </View>
 

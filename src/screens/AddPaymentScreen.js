@@ -83,6 +83,12 @@ export default function AddPaymentScreen({ onBack, onSaved, user }) {
 
   async function save() {
     setErrorDialog('');
+    const validationError = validatePaymentForm(form);
+    if (validationError) {
+      setErrorDialog(validationError);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -247,13 +253,15 @@ function BankForm({ form, updateField }) {
     <View style={styles.formCard}>
       <Field
         label="Banco"
-        onChangeText={(value) => updateField('bank', value)}
+        maxLength={60}
+        onChangeText={(value) => updateField('bank', value.slice(0, 60))}
         placeholder="Ej. Santander"
         value={form.bank}
       />
       <Field
         label="Tipo de cuenta"
-        onChangeText={(value) => updateField('accountType', value)}
+        maxLength={40}
+        onChangeText={(value) => updateField('accountType', value.slice(0, 40))}
         placeholder="Cuenta corriente / Caja de ahorro"
         value={form.accountType}
       />
@@ -268,7 +276,8 @@ function BankForm({ form, updateField }) {
       <Field
         autoCapitalize="characters"
         label="Alias"
-        onChangeText={(value) => updateField('alias', value)}
+        maxLength={30}
+        onChangeText={(value) => updateField('alias', value.replace(/[^A-Za-z0-9.-]/g, '').toUpperCase().slice(0, 30))}
         placeholder="JUAN.PEREZ.BANCO"
         value={form.alias}
       />
@@ -281,13 +290,15 @@ function CheckForm({ form, pickCheckImage, updateField }) {
     <View style={styles.formCard}>
       <Field
         label="Banco emisor"
-        onChangeText={(value) => updateField('bank', value)}
+        maxLength={60}
+        onChangeText={(value) => updateField('bank', value.slice(0, 60))}
         placeholder="Ej. Banco Nacional"
         value={form.bank}
       />
       <Field
         keyboardType="numeric"
         label="Numero de cheque"
+        maxLength={20}
         onChangeText={(value) => updateField('checkNumber', onlyDigits(value).slice(0, 20))}
         placeholder="0000 0000 0000"
         value={form.checkNumber}
@@ -329,6 +340,47 @@ function getSaveLabel(type) {
   if (type === 'cuenta') return 'Guardar cuenta';
   if (type === 'cheque') return 'Guardar cheque';
   return 'Guardar tarjeta';
+}
+
+function validatePaymentForm(form) {
+  if (Number(onlyDigits(form.amount)) <= 0) {
+    return 'Ingresa un monto de garantia mayor a cero.';
+  }
+
+  if (form.type === 'cuenta') {
+    if (!form.bank.trim()) return 'Ingresa el banco.';
+    if (!form.accountType.trim()) return 'Ingresa el tipo de cuenta.';
+    if (onlyDigits(form.cbu).length !== 22) return 'El CBU o CVU debe tener 22 digitos.';
+    if (!/^[A-Za-z0-9.-]{6,30}$/.test(form.alias.trim())) {
+      return 'El alias debe tener entre 6 y 30 caracteres: letras, numeros, puntos o guiones.';
+    }
+  }
+
+  if (form.type === 'cheque') {
+    const checkNumberLength = onlyDigits(form.checkNumber).length;
+    if (!form.bank.trim()) return 'Ingresa el banco emisor.';
+    if (checkNumberLength < 4 || checkNumberLength > 20) {
+      return 'El numero de cheque debe tener entre 4 y 20 digitos.';
+    }
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(form.issueDate)) {
+      return 'Ingresa la fecha del cheque con formato DD/MM/AAAA.';
+    }
+    if (isFutureSlashDate(form.issueDate)) {
+      return 'La fecha de emision del cheque no puede ser futura.';
+    }
+    if (!form.checkImageUri) return 'Carga una foto del cheque certificado.';
+  }
+
+  return '';
+}
+
+function isFutureSlashDate(value) {
+  const [day, month, year] = String(value).split('/').map(Number);
+  const date = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return date.getTime() > today.getTime();
 }
 
 function maskCard(value) {

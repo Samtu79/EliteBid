@@ -1,5 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 
+import { hasNetworkConnection } from './networkStatus';
+
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001/api';
 const WEB_API_URL = process.env.EXPO_PUBLIC_WEB_API_URL || API_URL;
 const MOBILE_API_URL = process.env.EXPO_PUBLIC_MOBILE_API_URL || '';
@@ -37,6 +39,10 @@ export async function apiRequest(path, options = {}) {
   const apiUrl = resolveApiUrl();
   let response;
 
+  if (!hasNetworkConnection()) {
+    throw new Error('Sin conexion a internet. Revisa el WiFi o los datos moviles y volve a intentar.');
+  }
+
   try {
     response = await fetch(`${apiUrl}${path}`, {
       ...options,
@@ -48,7 +54,7 @@ export async function apiRequest(path, options = {}) {
       }
     });
   } catch {
-    throw new Error('No pudimos conectarnos con EliteBid en este momento. Intenta nuevamente en unos instantes.');
+    throw new Error('No pudimos conectarnos con el servidor de EliteBid. Revisa que la API este levantada en el puerto configurado o que tengas conexion.');
   }
 
   const payload = await response.json().catch(() => null);

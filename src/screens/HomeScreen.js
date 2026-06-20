@@ -41,6 +41,7 @@ export default function HomeScreen({
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
   const [favoriteIds, setFavoriteIds] = useState([]);
+  const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
   const publicGuest = user?.guestMode || !user?.clienteId;
@@ -53,14 +54,22 @@ export default function HomeScreen({
   }, []);
 
   async function load() {
-    const [auctions, favorites] = await Promise.all([
-      getHomeAuctions(user.clienteId),
-      publicGuest ? Promise.resolve([]) : getFavoriteAuctionIds(user.clienteId)
-    ]);
+    try {
+      setLoadError('');
+      const [auctions, favorites] = await Promise.all([
+        getHomeAuctions(user.clienteId),
+        publicGuest ? Promise.resolve([]) : getFavoriteAuctionIds(user.clienteId)
+      ]);
 
-    setLiveAuctions(auctions.live);
-    setUpcomingAuctions(auctions.upcoming);
-    setFavoriteIds(favorites);
+      setLiveAuctions(auctions.live || []);
+      setUpcomingAuctions(auctions.upcoming || []);
+      setFavoriteIds(favorites || []);
+    } catch (error) {
+      setLiveAuctions([]);
+      setUpcomingAuctions([]);
+      setFavoriteIds([]);
+      setLoadError(error.message);
+    }
   }
 
   useEffect(() => {
@@ -69,8 +78,11 @@ export default function HomeScreen({
 
   async function refresh() {
     setRefreshing(true);
-    await load();
-    setRefreshing(false);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function toggleFavorite(auctionId) {
@@ -79,11 +91,15 @@ export default function HomeScreen({
       return;
     }
 
-    const wasFavorite = favoriteIds.includes(auctionId);
-    const nextIds = await toggleFavoriteAuction(user.clienteId, auctionId);
+    try {
+      const wasFavorite = favoriteIds.includes(auctionId);
+      const nextIds = await toggleFavoriteAuction(user.clienteId, auctionId);
 
-    setFavoriteIds(nextIds);
-    setToast(wasFavorite ? 'Quitado de favoritos.' : 'Agregado a favoritos.');
+      setFavoriteIds(nextIds);
+      setToast(wasFavorite ? 'Quitado de favoritos.' : 'Agregado a favoritos.');
+    } catch (error) {
+      setToast(error.message);
+    }
   }
 
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
@@ -145,7 +161,20 @@ export default function HomeScreen({
           </View>
         ) : null}
 
-        {!publicGuest ? (
+        {loadError ? (
+          <View style={styles.connectionCard}>
+            <MaterialCommunityIcons color={colors.primary} name="server-network-off" size={34} />
+            <View style={styles.connectionCopy}>
+              <Text style={styles.connectionTitle}>Servidor no disponible</Text>
+              <Text style={styles.connectionText}>{loadError}</Text>
+            </View>
+            <Pressable onPress={refresh} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Reintentar</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!publicGuest && !loadError ? (
           <>
             <SectionHeader action="Ver todas" onAction={onOpenAuctions} title="Subastas abiertas" />
             <ScrollView
@@ -166,22 +195,26 @@ export default function HomeScreen({
           </>
         ) : null}
 
-        <SectionHeader
-          action={publicGuest ? 'Ver todas' : undefined}
-          onAction={publicGuest ? onOpenAuctions : undefined}
-          title={publicGuest ? 'Catalogos publicos futuros' : 'Proximas subastas'}
-        />
-        <View style={styles.list}>
-          {upcomingAuctions.map((auction) => (
-            <AuctionListItem
-              auction={auction}
-              isFavorite={favoriteSet.has(auction.id)}
-              key={auction.id}
-              onPress={() => onOpenAuctionDetail?.(auction.id, 'home')}
-              onToggleFavorite={publicGuest ? undefined : () => toggleFavorite(auction.id)}
+        {!loadError ? (
+          <>
+            <SectionHeader
+              action={publicGuest ? 'Ver todas' : undefined}
+              onAction={publicGuest ? onOpenAuctions : undefined}
+              title={publicGuest ? 'Catalogos publicos futuros' : 'Proximas subastas'}
             />
-          ))}
-        </View>
+            <View style={styles.list}>
+              {upcomingAuctions.map((auction) => (
+                <AuctionListItem
+                  auction={auction}
+                  isFavorite={favoriteSet.has(auction.id)}
+                  key={auction.id}
+                  onPress={() => onOpenAuctionDetail?.(auction.id, 'home')}
+                  onToggleFavorite={publicGuest ? undefined : () => toggleFavorite(auction.id)}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
 
       <BottomNav activeTab="home" onNavigate={onNavigate} />
@@ -399,6 +432,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceLowest,
     flex: 1
   },
+  connectionCard: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(204, 193, 255, 0.22)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 22,
+    padding: 16
+  },
+  connectionCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  connectionText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 4
+  },
+  connectionTitle: {
+    color: colors.onSurface,
+    fontSize: 15,
+    fontWeight: '900'
+  },
   content: {
     paddingBottom: bottomNavHeight + 30,
     paddingHorizontal: 20,
@@ -591,6 +651,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     height: '100%'
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 12
+  },
+  retryButtonText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase'
   },
   sectionAction: {
     color: colors.primary,

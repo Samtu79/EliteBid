@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Animated, Easing, Image, StatusBar, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
 
 import { initDatabase } from './src/backend/database';
 import { getActiveSession, signOut } from './src/backend/authService';
+import { getInitialNetworkStatus, subscribeNetworkStatus } from './src/backend/networkStatus';
+import { notifyOfflineConnection } from './src/backend/offlineNotificationService';
 import AddPaymentScreen from './src/screens/AddPaymentScreen';
 import AuctionDetailScreen from './src/screens/AuctionDetailScreen';
 import AuctionsScreen from './src/screens/AuctionsScreen';
@@ -44,6 +46,8 @@ export default function App() {
   const [notificationsBackView, setNotificationsBackView] = useState('home');
   const [paymentBackView, setPaymentBackView] = useState('home');
   const [selectedAuctionId, setSelectedAuctionId] = useState(null);
+  const [online, setOnline] = useState(getInitialNetworkStatus);
+  const previousOnlineRef = useRef(true);
 
   useEffect(() => {
     let mounted = true;
@@ -65,7 +69,9 @@ export default function App() {
           }
         }
       } catch (error) {
-        console.warn('No se pudo iniciar EliteBid', error);
+        if (!/servidor de EliteBid|Sin conexion/i.test(error?.message || '')) {
+          console.warn('No se pudo iniciar EliteBid', error);
+        }
       }
     }
 
@@ -76,6 +82,15 @@ export default function App() {
       clearTimeout(splashTimeout);
     };
   }, []);
+
+  useEffect(() => subscribeNetworkStatus(setOnline), []);
+
+  useEffect(() => {
+    if (previousOnlineRef.current && !online) {
+      notifyOfflineConnection().catch(() => {});
+    }
+    previousOnlineRef.current = online;
+  }, [online]);
 
   useEffect(() => {
     if (!booting) {
@@ -88,7 +103,7 @@ export default function App() {
         duration: 1200,
         easing: Easing.inOut(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true
+        useNativeDriver: Platform.OS !== 'web'
       })
     );
 
@@ -223,6 +238,11 @@ export default function App() {
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor={colors.surfaceLowest} />
+      {!online ? (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>Sin conexion. Revisa el WiFi o los datos moviles.</Text>
+        </View>
+      ) : null}
       {user && appView === 'payments' ? (
         canUseVerifiedFeatures() ? (
         <PaymentMethodsScreen
@@ -374,6 +394,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center'
   },
+  offlineBanner: {
+    alignItems: 'center',
+    backgroundColor: colors.error,
+    left: 0,
+    minHeight: 28,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 1000
+  },
+  offlineText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'center'
+  },
   splashImage: {
     height: '100%',
     width: '100%'
@@ -382,10 +420,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 999,
     height: '100%',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
+    ...Platform.select({
+      web: {
+        boxShadow: `0 0 10px rgba(204, 193, 255, 0.45)`
+      },
+      default: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.45,
+        shadowRadius: 10
+      }
+    }),
     width: 118
   },
   splashProgressTrack: {

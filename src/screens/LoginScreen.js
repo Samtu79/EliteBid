@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,6 +23,25 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorDialog, setErrorDialog] = useState('');
+  const identifierInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      return undefined;
+    }
+
+    setIdentifier('');
+    setPassword('');
+    const timeout = setTimeout(() => {
+      identifierInputRef.current?.clear?.();
+      passwordInputRef.current?.clear?.();
+      identifierInputRef.current?.setNativeProps?.({ text: '' });
+      passwordInputRef.current?.setNativeProps?.({ text: '' });
+    }, 120);
+
+    return () => clearTimeout(timeout);
+  }, []);
 
   async function handleLogin() {
     setErrorDialog('');
@@ -82,12 +101,16 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
             <Text style={styles.label}>Correo o documento</Text>
             <TextInput
               autoCapitalize="none"
-              autoComplete="email"
+              autoComplete="off"
+              autoCorrect={false}
+              importantForAutofill="no"
               keyboardType="email-address"
               onChangeText={setIdentifier}
               placeholder="tu@email.com o DNI/Pasaporte"
               placeholderTextColor="rgba(201, 196, 211, 0.55)"
+              ref={identifierInputRef}
               style={styles.input}
+              textContentType="none"
               value={identifier}
             />
           </View>
@@ -96,11 +119,18 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
             <Text style={styles.label}>Clave o codigo</Text>
             <View style={styles.inputWrapWithAccessory}>
               <TextInput
+                autoCapitalize="none"
+                autoComplete="new-password"
+                autoCorrect={false}
+                importantForAutofill="no"
                 onChangeText={setPassword}
                 placeholder="Clave o codigo de 6 digitos"
                 placeholderTextColor="rgba(201, 196, 211, 0.55)"
+                ref={passwordInputRef}
                 secureTextEntry={!showPassword}
+                spellCheck={false}
                 style={[styles.input, styles.inputWithAccessory]}
+                textContentType="none"
                 value={password}
               />
               <Pressable

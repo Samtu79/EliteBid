@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import { colors, radii } from '../theme';
@@ -81,11 +81,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     position: 'absolute',
     right: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.28,
-    shadowRadius: 22,
-    elevation: 20
+    ...Platform.select({
+      web: {
+        boxShadow: '0 -12px 22px rgba(0, 0, 0, 0.28)'
+      },
+      default: {
+        elevation: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -12 },
+        shadowOpacity: 0.28,
+        shadowRadius: 22
+      }
+    })
   },
   navItem: {
     alignItems: 'center',

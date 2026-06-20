@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import { colors, radii } from '../theme';
@@ -72,10 +72,17 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     position: 'absolute',
     right: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.26,
-    shadowRadius: 18,
-    elevation: 22
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 18px rgba(0, 0, 0, 0.26)'
+      },
+      default: {
+        elevation: 22,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.26,
+        shadowRadius: 18
+      }
+    })
   }
 });

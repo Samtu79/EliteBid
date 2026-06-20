@@ -93,6 +93,15 @@ Si no hay SMTP ni `RESEND_API_KEY`, el registro no falla: el backend deja la cue
 curl -X POST http://127.0.0.1:3001/api/auth/resend-verification -H "Content-Type: application/json" -d "{\"email\":\"usuario@mail.com\"}"
 ```
 
+El codigo de 6 digitos verifica solamente el email. La validacion de cuenta se informa despues, en otro mail, como aceptada o rechazada por la empresa:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/cuentas/1/validacion -H "Content-Type: application/json" -H "x-admin-review-token: TU_TOKEN" -d "{\"resultado\":\"aceptada\"}"
+curl -X POST http://127.0.0.1:3001/api/cuentas/1/validacion -H "Content-Type: application/json" -H "x-admin-review-token: TU_TOKEN" -d "{\"resultado\":\"rechazada\"}"
+```
+
+Si se define `ADMIN_REVIEW_TOKEN` en `.env`, ese token habilita la validacion administrativa por API.
+
 Para recuperar clave, primero se solicita el codigo por mail y despues se confirma el cambio:
 
 ```bash

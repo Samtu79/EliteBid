@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const colors = {
   background: '#1a0b31',
   error: '#ffb4ab',
@@ -30,11 +32,16 @@ export const radii = {
 };
 
 export const shadows = {
-  ambient: {
-    elevation: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24
-  }
+  ambient: Platform.select({
+    web: {
+      boxShadow: `0 16px 24px rgba(204, 193, 255, 0.12)`
+    },
+    default: {
+      elevation: 8,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24
+    }
+  })
 };

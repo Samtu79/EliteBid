@@ -14,6 +14,7 @@ const SESSION_DAYS = 7;
 const BID_TIMER_SECONDS = 60;
 const COMPANY_CLIENT_ID = 4;
 const SHIPPING_COST = 25000;
+const MAX_BID_LIMIT_CATEGORIES = new Set(['bronce', 'comun', 'plata']);
 const categoryRank = { comun: 1, especial: 2, plata: 3, oro: 4, platino: 5 };
 const categoryRequirements = [
   {
@@ -212,11 +213,6 @@ app.post('/api/auth/register-guest', wrap(async (req, res) => {
     toMysqlDateTime(new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000))
   ]);
 
-  const accountReviewResult = await sendAccountReviewForUser({
-    accepted: true,
-    email: form.email,
-    name: form.firstName
-  });
   const emailResult = await sendVerificationForUser({
     email: form.email,
     name: form.firstName,
@@ -225,7 +221,7 @@ app.post('/api/auth/register-guest', wrap(async (req, res) => {
 
   res.json({
     ...toSessionUser(user, token),
-    accountReviewEmailSent: accountReviewResult.sent,
+    accountReviewPending: true,
     verificationPending: true,
     verificationEmailSent: emailResult.sent
   });
@@ -275,11 +271,6 @@ app.post(['/api/auth/register/paso1', '/api/auth/registro/fase1'], wrap(async (r
   );
 
   const user = await first('SELECT id FROM usuarios WHERE lower(email) = ? LIMIT 1', [form.email]);
-  const accountReviewResult = await sendAccountReviewForUser({
-    accepted: true,
-    email: form.email,
-    name: form.firstName
-  });
   const emailResult = await sendVerificationForUser({
     email: form.email,
     name: form.firstName,
@@ -289,7 +280,7 @@ app.post(['/api/auth/register/paso1', '/api/auth/registro/fase1'], wrap(async (r
   res.status(201).json({
     email: form.email,
     estado: 'pendiente',
-    accountReviewEmailSent: accountReviewResult.sent,
+    accountReviewPending: true,
     registrationId: String(user.id),
     verificationEmailSent: emailResult.sent
   });
@@ -432,6 +423,53 @@ app.post('/api/auth/complete-verification', wrap(async (req, res) => {
   }
 
   res.json(toSessionUser({ ...user, rol: 'cliente', estado: 'activo' }, sessionToken));
+}));
+
+app.post(['/api/admin/accounts/:clienteId/review', '/api/cuentas/:clienteId/validacion'], wrap(async (req, res) => {
+  await requireAccountReviewer(req);
+  const clienteId = parsePositiveInt(req.params.clienteId, 'Cuenta invalida.');
+  const reviewValue = req.body.accepted ?? req.body.aceptada ?? req.body.admitida ?? req.body.resultado;
+  const accepted = toBoolean(reviewValue) || normalizeWhitespace(reviewValue).toLowerCase() === 'aceptada';
+  const rejected = isRejectedReviewValue(reviewValue);
+  if (!accepted && !rejected) {
+    throw new Error('Indica si la cuenta fue aceptada o rechazada.');
+  }
+
+  const user = await first(
+    `SELECT u.id, u.email, u.nombre, u.email_verificado AS emailVerified
+     FROM usuarios u
+     WHERE u.cliente_id = ?
+     LIMIT 1`,
+    [clienteId]
+  );
+  if (!user) throw new Error('No encontramos esa cuenta.');
+
+  if (accepted) {
+    await run('UPDATE clientes SET admitido = ? WHERE identificador = ?', ['si', clienteId]);
+    await run(
+      `UPDATE usuarios
+       SET estado = CASE WHEN email_verificado = 'si' THEN 'activo' ELSE estado END
+       WHERE id = ?`,
+      [user.id]
+    );
+  } else {
+    await run('UPDATE clientes SET admitido = ? WHERE identificador = ?', ['no', clienteId]);
+    await run('UPDATE usuarios SET estado = ? WHERE id = ?', ['bloqueado', user.id]);
+    await run('DELETE FROM sesiones WHERE usuario_id = ?', [user.id]);
+  }
+
+  const reviewEmail = await sendAccountReviewForUser({
+    accepted,
+    email: user.email,
+    name: user.nombre
+  });
+
+  res.json({
+    accepted,
+    accountReviewEmailSent: reviewEmail.sent,
+    clienteId,
+    ok: true
+  });
 }));
 
 app.get('/api/auth/verify-email', wrap(async (req, res) => {
@@ -1062,36 +1100,7 @@ app.post('/api/users/:clienteId/lots', wrap(async (req, res) => {
 app.post('/api/users/:clienteId/purchases/:bidId/settle', wrap(async (req, res) => {
   const viewer = await requireMatchingClient(req, req.params.clienteId);
   const bidId = parsePositiveInt(req.params.bidId, 'Puja invalida.');
-  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para registrar compras.');
-  const purchase = await first(
-    `SELECT p.identificador AS id, p.importe AS amount, s.identificador AS auctionId,
-      prod.identificador AS productId, prod.duenio AS ownerId, i.identificador AS itemId,
-      i.comision AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
-      r.estado_pago AS paymentStatus
-     FROM pujos p
-     JOIN asistentes a ON a.identificador = p.asistente
-     JOIN items_catalogo i ON i.identificador = p.item
-     JOIN catalogos c ON c.identificador = i.catalogo
-     JOIN subastas s ON s.identificador = c.subasta
-     JOIN productos prod ON prod.identificador = i.producto
-     LEFT JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
-     WHERE a.cliente = ? AND p.identificador = ? AND p.ganador = 'si'
-     LIMIT 1`,
-    [viewer.clienteId, bidId]
-  );
-
-  if (!purchase) throw new Error('No encontramos una compra pendiente para esa puja.');
-  if (purchase.receiptId) {
-    await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['pagada', purchase.receiptId]);
-  } else {
-    await run(
-      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [purchase.auctionId, purchase.ownerId, purchase.productId, viewer.clienteId, purchase.paymentMethodId, purchase.amount, purchase.commission, 'pagada']
-    );
-    await run('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', ['si', purchase.itemId]);
-  }
-
+  await settlePurchase(viewer.clienteId, bidId);
   res.json(await getUserPurchases(viewer.clienteId));
 }));
 
@@ -1229,6 +1238,23 @@ async function settlePurchase(clienteId, bidId) {
   );
 
   if (!purchase) throw new Error('No encontramos una compra pendiente para esa puja.');
+  const totalDue = Number(purchase.amount || 0) + Number(purchase.commission || 0) + SHIPPING_COST;
+  const payment = purchase.paymentMethodId
+    ? await first(
+      `SELECT monto_garantia AS guaranteeAmount
+       FROM medios_pago
+       WHERE identificador = ? AND cliente = ?
+       LIMIT 1`,
+      [purchase.paymentMethodId, clienteId]
+    )
+    : null;
+  const availableFunds = Number(payment?.guaranteeAmount || 0);
+
+  if (!payment || availableFunds < totalDue) {
+    await registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds);
+    throw new Error(`Fondos insuficientes para confirmar el pago. Se genero una multa del 10% de la oferta (${formatMoney(Number(purchase.amount || 0) * 0.1)}). Debes pagarla y presentar los fondos dentro de las 72 horas.`);
+  }
+
   if (purchase.receiptId) {
     await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['pagada', purchase.receiptId]);
   } else {
@@ -1239,6 +1265,39 @@ async function settlePurchase(clienteId, bidId) {
     );
     await run('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', ['si', purchase.itemId]);
   }
+}
+
+async function registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds) {
+  const penaltyAmount = Math.round(Number(purchase.amount || 0) * 0.1 * 100) / 100;
+  const description = `No se acreditaron fondos suficientes al confirmar el pago de ${formatMoney(purchase.amount)}. Debe abonar esta multa antes de participar en otra subasta y presentar los fondos necesarios dentro de las 72 horas. Total requerido: ${formatMoney(totalDue)}. Fondos disponibles declarados: ${formatMoney(availableFunds)}.`;
+
+  if (purchase.receiptId) {
+    await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['multa', purchase.receiptId]);
+  } else {
+    await run(
+      `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [purchase.auctionId, purchase.ownerId, purchase.productId, clienteId, purchase.paymentMethodId, purchase.amount, purchase.commission, 'multa']
+    );
+  }
+
+  const existing = await first(
+    `SELECT identificador AS id
+     FROM penalidades
+     WHERE cliente = ? AND titulo = ? AND estado IN ('activa', 'vencida')
+     LIMIT 1`,
+    [clienteId, `Multa por falta de fondos - puja ${purchase.id}`]
+  );
+
+  if (!existing) {
+    await run(
+      `INSERT INTO penalidades (cliente, titulo, descripcion, importe, estado, vencimiento)
+       VALUES (?, ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL 3 DAY))`,
+      [clienteId, `Multa por falta de fondos - puja ${purchase.id}`, description, penaltyAmount, 'activa']
+    );
+  }
+
+  await refreshClientCategory(clienteId);
 }
 
 async function savePurchaseDelivery(clienteId, bidId, value) {
@@ -1441,6 +1500,7 @@ async function getAuctionCatalogLots(auctionId, viewer = null) {
 async function enterAuctionRoom(clienteId, auctionId) {
   const detail = await getAuctionDetail(auctionId, clienteId);
   if (detail.status !== 'abierta') throw new Error('La sala todavia no esta abierta.');
+  await assertNoActivePenalties(clienteId);
   if (!detail.eligibility.categoryOk) throw new Error('Tu categoria no permite participar en esta subasta.');
   if (detail.eligibility.verifiedPayments < 1) {
     throw new Error('Necesitas registrar un medio de pago verificado para pujar.');
@@ -1676,11 +1736,13 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   const basePrice = Number(detail.basePrice || 0);
   const minBid = currentBid + basePrice * 0.01;
   const maxBid = currentBid + basePrice * 0.2;
-  const bypassRange = ['oro', 'platino'].includes(detail.category);
+  const hasMaxBidLimit = MAX_BID_LIMIT_CATEGORIES.has(String(detail.category || '').toLowerCase());
 
   if (amount <= currentBid) throw new Error(`El monto debe superar la puja actual de ${formatMoney(currentBid)}.`);
-  if (!bypassRange && amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
-  if (!bypassRange && amount > maxBid) throw new Error(`El monto no puede superar ${formatMoney(maxBid)}.`);
+  if (amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
+  if (hasMaxBidLimit && amount > maxBid) {
+    throw new Error(`Para categorias bronce y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
+  }
 
   const resolvedPaymentId = await resolveBidPayment(clienteId, paymentMethodId, amount);
   const assistantId = await ensureAssistant(clienteId, auctionId);
@@ -1704,7 +1766,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   return {
     auction: await getAuctionDetail(auctionId, clienteId),
     bid: { id: result.insertId, amount },
-    bounds: { min: minBid, max: bypassRange ? null : maxBid }
+    bounds: { min: minBid, max: hasMaxBidLimit ? maxBid : null }
   };
 }
 
@@ -1783,6 +1845,22 @@ async function requireAuthenticatedClient(req) {
   return viewer;
 }
 
+async function requireAccountReviewer(req) {
+  const configuredToken = process.env.ADMIN_REVIEW_TOKEN;
+  const providedToken = req.headers['x-admin-review-token'] || req.headers['x-admin-token'];
+  if (configuredToken) {
+    if (providedToken !== configuredToken) {
+      throw new Error('No tenes permisos para validar cuentas.');
+    }
+    return;
+  }
+
+  const viewer = await requireAuthenticatedClient(req);
+  if (viewer.rol !== 'admin') {
+    throw new Error('No tenes permisos para validar cuentas.');
+  }
+}
+
 async function isGuest(clienteId) {
   const viewer = await getViewer(clienteId);
   return viewer?.rol === 'invitado';
@@ -1791,6 +1869,19 @@ async function isGuest(clienteId) {
 async function assertNotGuest(clienteId, message) {
   if (await isGuest(clienteId)) {
     throw new Error(message);
+  }
+}
+
+async function assertNoActivePenalties(clienteId) {
+  const penalties = await first(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(importe), 0) AS amount
+     FROM penalidades
+     WHERE cliente = ? AND estado IN ('activa', 'vencida')`,
+    [clienteId]
+  );
+
+  if (Number(penalties?.total || 0) > 0) {
+    throw new Error(`Tenes penalidades pendientes por ${formatMoney(penalties.amount)}. Debes abonarlas antes de participar en otra subasta.`);
   }
 }
 
@@ -2837,6 +2928,12 @@ function parseQuantity(value) {
 
 function toBoolean(value) {
   return value === true || value === 'true' || value === 'si' || value === 1 || value === '1';
+}
+
+function isRejectedReviewValue(value) {
+  if (value === false) return true;
+  const normalized = normalizeWhitespace(value).toLowerCase();
+  return ['false', 'no', 'rechazada', 'rechazado', 'rejected'].includes(normalized);
 }
 
 function parseDetail(detail) {
