@@ -480,8 +480,9 @@ function isFutureSlashDate(value) {
 }
 
 function maskCard(value) {
-  const digits = String(value).replace(/\D/g, '').padEnd(16, '*').slice(0, 16);
-  return digits.replace(/(.{4})/g, '$1 ').trim();
+  const digits = onlyDigits(value);
+  const visibleDigits = digits || '****************';
+  return visibleDigits.replace(/(.{4})/g, '$1 ').trim();
 }
 
 function onlyDigits(value) {
@@ -495,20 +496,9 @@ function formatCardNumber(value) {
 
 function isValidCardNumber(value) {
   const digits = onlyDigits(value);
-  if (!/^\d{13,16}$/.test(digits)) return false;
-
-  let sum = 0;
-  let shouldDouble = false;
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    let digit = Number(digits[index]);
-    if (shouldDouble) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-    shouldDouble = !shouldDouble;
-  }
-  return sum % 10 === 0;
+  // No hay cobro real ni pasarela bancaria: validamos el formato requerido
+  // por EliteBid (16 digitos) sin rechazar tarjetas demo por checksum.
+  return /^\d{16}$/.test(digits) && !/^(\d)\1+$/.test(digits);
 }
 
 function formatExpiry(value) {

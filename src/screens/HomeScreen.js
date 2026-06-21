@@ -128,9 +128,11 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.greetingRow}>
-          <View>
+          <View style={styles.greetingCopy}>
             <Text style={styles.greeting}>{greeting},</Text>
-            <Text style={styles.userName}>{user.nombre}</Text>
+            <Text adjustsFontSizeToFit minimumFontScale={0.62} numberOfLines={2} style={styles.userName}>
+              {user.nombre}
+            </Text>
           </View>
           <View style={styles.badge}>
             <MaterialCommunityIcons color={colors.tertiary} name="seal-variant" size={16} />
@@ -355,6 +357,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(72, 69, 81, 0.32)',
     borderRadius: radii.full,
     borderWidth: 1,
+    flexShrink: 0,
     flexDirection: 'row',
     gap: 6,
     paddingHorizontal: 12,
@@ -495,6 +498,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 4
+  },
+  greetingCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12
   },
   greetingRow: {
     alignItems: 'flex-end',
@@ -685,6 +693,7 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 32,
     fontWeight: '900',
-    letterSpacing: 0
+    letterSpacing: 0,
+    lineHeight: 37
   }
 });

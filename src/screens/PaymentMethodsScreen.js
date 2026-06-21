@@ -14,7 +14,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { deletePaymentMethod, getPaymentMethods } from '../backend/paymentService';
 import { colors, radii, shadows } from '../theme';
 
-export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, user }) {
+export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, refreshKey = 0, user }) {
   const [methods, setMethods] = useState([]);
   const [methodToDelete, setMethodToDelete] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
@@ -44,7 +44,7 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, use
 
   useEffect(() => {
     load();
-  }, [user.clienteId]);
+  }, [refreshKey, user.clienteId]);
 
   async function refresh() {
     setRefreshing(true);

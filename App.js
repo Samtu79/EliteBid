@@ -46,6 +46,7 @@ export default function App() {
   const [detailBackView, setDetailBackView] = useState('auctions');
   const [notificationsBackView, setNotificationsBackView] = useState('home');
   const [paymentBackView, setPaymentBackView] = useState('home');
+  const [paymentRefreshKey, setPaymentRefreshKey] = useState(0);
   const [selectedAuctionId, setSelectedAuctionId] = useState(null);
   const [guestAccessDialogVisible, setGuestAccessDialogVisible] = useState(false);
   const [guestAccessTarget, setGuestAccessTarget] = useState('esta seccion');
@@ -281,6 +282,7 @@ export default function App() {
           onAdd={() => setAppView('addPayment')}
           onBack={() => setAppView(paymentBackView)}
           onUserUpdated={setUser}
+          refreshKey={paymentRefreshKey}
           user={user}
         />
         ) : (
@@ -307,6 +309,7 @@ export default function App() {
         <PaymentMethodsScreen
           onAdd={() => setAppView('registrationAddPayment')}
           onBack={() => setAppView('home')}
+          refreshKey={paymentRefreshKey}
           user={user}
         />
       ) : user && appView === 'addPayment' ? (
@@ -314,6 +317,7 @@ export default function App() {
           onBack={() => setAppView('payments')}
           onSaved={(updatedUser) => {
             setUser(updatedUser);
+            setPaymentRefreshKey((current) => current + 1);
             setAppView('payments');
           }}
           user={user}
@@ -323,6 +327,7 @@ export default function App() {
           onBack={() => setAppView('registrationPayments')}
           onSaved={(updatedUser) => {
             setUser(updatedUser);
+            setPaymentRefreshKey((current) => current + 1);
             setAppView('home');
           }}
           user={user}

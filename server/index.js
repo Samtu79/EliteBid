@@ -3471,7 +3471,7 @@ function sanitizePayment(payload) {
     sanitized.expiry = normalizeExpiry(sanitized.expiry);
     sanitized.cvv = onlyDigits(sanitized.cvv);
 
-    if (sanitized.cardNumber.length < 13 || sanitized.cardNumber.length > 16 || !isValidCardNumber(sanitized.cardNumber)) {
+    if (sanitized.cardNumber.length !== 16 || !isValidCardNumber(sanitized.cardNumber)) {
       throw new Error('Ingresa un numero de tarjeta valido.');
     }
     if (!/^\d{3,4}$/.test(sanitized.cvv)) {
@@ -3849,21 +3849,7 @@ function detectCardBrand(value) {
 
 function isValidCardNumber(value = '') {
   const digits = onlyDigits(value);
-  if (!/^\d{13,16}$/.test(digits)) return false;
-
-  let sum = 0;
-  let shouldDouble = false;
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    let digit = Number(digits[index]);
-    if (shouldDouble) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-    shouldDouble = !shouldDouble;
-  }
-
-  return sum % 10 === 0;
+  return /^\d{16}$/.test(digits) && !/^(\d)\1+$/.test(digits);
 }
 
 function sanitizeProfile(payload) {
