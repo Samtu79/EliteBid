@@ -22,12 +22,7 @@ function getPool() {
       ...baseConfig,
       database,
       waitForConnections: true,
-      // El plan de Clever Cloud usado por EliteBid permite solo 5 conexiones
-      // simultaneas. Dos conexiones reutilizables alcanzan para esta API y
-      // evitan que un deploy deje fuera al proceso nuevo.
-      connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 2),
-      maxIdle: Number(process.env.DB_MAX_IDLE || 2),
-      idleTimeout: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+      connectionLimit: 10,
       namedPlaceholders: false
     });
   }
