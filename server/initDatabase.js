@@ -503,6 +503,103 @@ async function seedDatabase() {
     ]
   });
 
+  // Salas de demostracion: se muestran como las tres unicas salas en vivo del catalogo.
+  await run("UPDATE subastas SET estado = 'programada' WHERE identificador BETWEEN 1 AND 10 AND estado = 'abierta'");
+  const demoDate = new Date().toISOString().slice(0, 10);
+
+  await seedAuction({
+    id: 11,
+    title: 'Sala en vivo: Diseño moderno de autor',
+    date: demoDate,
+    time: '18:00',
+    status: 'abierta',
+    category: 'especial',
+    location: 'Sala Diseño, Puerto Madero',
+    image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80',
+    product: 'Sillón de diseño escandinavo restaurado, tapizado en bouclé natural.',
+    basePrice: 380000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Lámpara de pie cromada de la década de 1970, con pantalla original.',
+        image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
+        basePrice: 195000
+      },
+      {
+        product: 'Mesa auxiliar de nogal con tapa circular y terminación artesanal.',
+        image: 'https://images.unsplash.com/photo-1532323544230-7191fd51bc1b?auto=format&fit=crop&w=900&q=80',
+        basePrice: 225000
+      },
+      {
+        product: 'Silla de cuero y hierro de autor argentino, edición limitada.',
+        image: 'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80',
+        basePrice: 160000
+      }
+    ]
+  });
+
+  await seedAuction({
+    id: 12,
+    title: 'Sala en vivo: Arte y fotografía federal',
+    date: demoDate,
+    time: '18:15',
+    status: 'abierta',
+    category: 'oro',
+    location: 'Galería Norte, Recoleta',
+    image: 'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?auto=format&fit=crop&w=900&q=80',
+    product: 'Pintura abstracta de gran formato, óleo sobre tela, firmada al dorso.',
+    basePrice: 980000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Escultura contemporánea en bronce patinado, serie numerada.',
+        image: 'https://images.unsplash.com/photo-1577083552431-6e5fd01988f7?auto=format&fit=crop&w=900&q=80',
+        basePrice: 720000
+      },
+      {
+        product: 'Fotografía urbana firmada, copia pigmentaria con certificado.',
+        image: 'https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=900&q=80',
+        basePrice: 340000
+      },
+      {
+        product: 'Grabado argentino de colección con marco de madera original.',
+        image: 'https://images.unsplash.com/photo-1561214115-f2f134cc4912?auto=format&fit=crop&w=900&q=80',
+        basePrice: 265000
+      }
+    ]
+  });
+
+  await seedAuction({
+    id: 13,
+    title: 'Sala en vivo: Automovilismo y relojería',
+    date: demoDate,
+    time: '18:30',
+    status: 'abierta',
+    category: 'platino',
+    location: 'Hangar de Colección, San Fernando',
+    image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',
+    product: 'Coupé deportivo clásico restaurado, con documentación y dossier técnico.',
+    basePrice: 18500000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Casco de competición vintage, gráfico original y visor reemplazable.',
+        image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=900&q=80',
+        basePrice: 380000
+      },
+      {
+        product: 'Cronógrafo mecánico suizo con taquímetro y caja de acero.',
+        image: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=80',
+        basePrice: 1250000
+      },
+      {
+        product: 'Volante deportivo de madera, pieza de colección para automóvil clásico.',
+        image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80',
+        basePrice: 450000
+      }
+    ]
+  });
+
   await run(
     `INSERT IGNORE INTO penalidades (identificador, cliente, titulo, descripcion, importe, estado, vencimiento)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,

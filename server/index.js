@@ -2271,7 +2271,16 @@ async function getFavoriteAuctions(clienteId) {
      FROM favoritos f
      JOIN subastas s ON s.identificador = f.subasta
      JOIN catalogos c ON c.subasta = s.identificador
-     JOIN items_catalogo i ON i.catalogo = c.identificador
+     JOIN (
+       SELECT catalogo,
+         COALESCE(
+           MIN(CASE WHEN cierre_estado <> 'finalizada' THEN orden_lote END),
+           MAX(orden_lote)
+         ) AS orden_actual
+       FROM items_catalogo
+       GROUP BY catalogo
+     ) lote_actual ON lote_actual.catalogo = c.identificador
+     JOIN items_catalogo i ON i.catalogo = c.identificador AND i.orden_lote = lote_actual.orden_actual
      JOIN productos p ON p.identificador = i.producto
      WHERE f.cliente = ?
      ORDER BY f.creado_en DESC`,
