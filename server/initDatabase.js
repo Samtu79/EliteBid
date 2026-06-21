@@ -5,7 +5,11 @@ const { connectWithoutDatabase, database, getPool, query, run } = require('./db'
 const { hashPassword } = require('./passwordHash');
 
 async function initDatabase() {
-  if (process.env.DB_CREATE_DATABASE !== 'false') {
+  const databaseHost = process.env.DB_HOST || process.env.MYSQL_ADDON_HOST || '127.0.0.1';
+  const isLocalDatabase = ['127.0.0.1', 'localhost', '::1'].includes(databaseHost);
+  // En Clever/Render la base ya existe. Evitamos una conexion administrativa
+  // extra durante el arranque, que consume uno de los cinco cupos disponibles.
+  if (process.env.DB_CREATE_DATABASE === 'true' || (isLocalDatabase && process.env.DB_CREATE_DATABASE !== 'false')) {
     const connection = await connectWithoutDatabase();
 
     try {
