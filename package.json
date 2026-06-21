@@ -10,6 +10,8 @@
     "qa:seed": "node scripts/seed-test-examples.js",
     "db:seed-penalty-demos": "node scripts/seed-penalty-demo-accounts.js",
     "db:init": "node server/initDatabase.js",
+    "dev:tunnel:win": "powershell -ExecutionPolicy Bypass -File scripts/dev-tunnel.ps1",
+    "dev:tunnel:unix": "bash scripts/dev-tunnel.sh",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
