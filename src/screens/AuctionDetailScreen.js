@@ -210,10 +210,13 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           </View>
 
           <View style={styles.infoGrid}>
-            <InfoBlock label="Base" value={formatMoney(auction.basePrice)} />
-            <InfoBlock label="Actual" value={formatMoney(auction.currentBid || auction.basePrice)} />
-            <InfoBlock label="Fecha" value={formatDate(auction.date)} />
-            <InfoBlock label="Hora" value={auction.time} />
+            <InfoBlock label="Valor inicial" value={formatMoney(auction.basePrice)} />
+            <InfoBlock
+              label={Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Sin ofertas aun'}
+              value={Number(auction.currentBid || 0) > 0 ? formatMoney(auction.currentBid) : '-'}
+            />
+            <InfoBlock label="Fecha de inicio" value={formatDate(auction.date)} />
+            <InfoBlock label="Hora de inicio" value={auction.time} />
           </View>
 
           <View style={styles.ruleCard}>

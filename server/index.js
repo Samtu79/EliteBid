@@ -2377,6 +2377,7 @@ async function getFavoriteAuctions(clienteId) {
      JOIN items_catalogo i ON i.catalogo = c.identificador AND i.orden_lote = lote_actual.orden_actual
      JOIN productos p ON p.identificador = i.producto
      WHERE f.cliente = ?
+       AND s.estado <> 'cerrada'
      ORDER BY f.creado_en DESC`,
     [clienteId]
   );

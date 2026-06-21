@@ -237,7 +237,9 @@ function SectionHeader({ action, onAction, title }) {
 }
 
 function AuctionCard({ auction, isFavorite, onPress, onToggleFavorite }) {
-  const priceAvailable = auction.currentBid != null;
+  const priceAvailable = auction.basePrice != null;
+  const hasBid = Number(auction.currentBid || 0) > 0;
+  const displayedPrice = hasBid ? auction.currentBid : auction.basePrice;
 
   return (
     <Pressable onPress={onPress} style={styles.auctionCard}>
@@ -275,8 +277,8 @@ function AuctionCard({ auction, isFavorite, onPress, onToggleFavorite }) {
         <Text numberOfLines={2} style={styles.cardTitle}>
           {auction.title}
         </Text>
-        <Text style={styles.cardLabel}>{priceAvailable ? 'Puja actual' : 'Precio reservado'}</Text>
-        <Text style={styles.cardPrice}>{priceAvailable ? formatMoney(auction.currentBid) : 'Verificacion pendiente'}</Text>
+        <Text style={styles.cardLabel}>{hasBid ? 'Puja actual' : 'Valor inicial'}</Text>
+        <Text style={styles.cardPrice}>{priceAvailable ? formatMoney(displayedPrice) : 'Verificacion pendiente'}</Text>
       </View>
     </Pressable>
   );

@@ -9,6 +9,7 @@ const baseConfig = {
   port: Number(process.env.DB_PORT || process.env.MYSQL_ADDON_PORT || 3306),
   user: process.env.DB_USER || process.env.MYSQL_ADDON_USER || 'root',
   password: process.env.DB_PASSWORD || process.env.MYSQL_ADDON_PASSWORD || '',
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
   multipleStatements: true,
   ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } } : {})
 };

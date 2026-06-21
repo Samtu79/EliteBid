@@ -8,6 +8,7 @@
     "api": "node server/index.js",
     "qa:flow": "node scripts/qa-flow.js",
     "qa:seed": "node scripts/seed-test-examples.js",
+    "db:seed-penalty-demos": "node scripts/seed-penalty-demo-accounts.js",
     "db:init": "node server/initDatabase.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
