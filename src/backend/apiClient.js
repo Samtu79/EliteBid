@@ -60,10 +60,21 @@ export async function apiRequest(path, options = {}) {
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(payload?.message || 'No pudimos completar la operacion. Intenta nuevamente.');
+    throw new Error(publicApiErrorMessage(payload?.message));
   }
 
   return payload;
+}
+
+function publicApiErrorMessage(message) {
+  const value = String(message || '');
+  const infrastructureError = /max_user_connections|ER_USER_LIMIT_REACHED|mysql|sqlstate|econnrefused|etimedout/i.test(value);
+
+  if (infrastructureError) {
+    return 'La sala esta actualizandose. Reintenta en unos segundos.';
+  }
+
+  return value || 'No pudimos completar la operacion. Intenta nuevamente.';
 }
 
 function resolveApiUrl() {

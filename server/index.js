@@ -3145,6 +3145,18 @@ function wrap(handler) {
 }
 
 function errorHandler(error, _req, res, _next) {
+  const databaseUnavailable =
+    error?.code === 'ER_USER_LIMIT_REACHED' ||
+    ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'].includes(error?.code);
+
+  if (databaseUnavailable) {
+    console.error(`Base de datos temporalmente no disponible: ${error.code}`);
+    res.status(503).json({
+      message: 'La sala esta actualizandose. Reintenta en unos segundos.'
+    });
+    return;
+  }
+
   res.status(400).json({ message: error.message || 'Error inesperado.' });
 }
 

@@ -22,7 +22,12 @@ function getPool() {
       ...baseConfig,
       database,
       waitForConnections: true,
-      connectionLimit: 10,
+      // Clever Cloud admite cinco conexiones por usuario. Este backend usa un
+      // pool chico y reutilizable para no saturarlo cuando varias salas hacen
+      // polling al mismo tiempo.
+      connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 2),
+      maxIdle: Number(process.env.DB_MAX_IDLE || 2),
+      idleTimeout: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
       namedPlaceholders: false
     });
   }

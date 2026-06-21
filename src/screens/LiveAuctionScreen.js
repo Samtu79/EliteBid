@@ -39,6 +39,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const userEditedAmountRef = useRef(false);
   const leadingItemIdRef = useRef(null);
   const celebratedWinIdsRef = useRef(new Set());
+  const pollingRef = useRef(false);
+  const pollingWarningShownRef = useRef(false);
   const leadingActive = Boolean(
     auction?.closure?.winner?.isCurrentUser &&
       auction?.closureStatus === 'en_cuenta' &&
@@ -97,11 +99,27 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
   useEffect(() => {
     const poll = setInterval(async () => {
+      if (pollingRef.current) {
+        return;
+      }
+
+      pollingRef.current = true;
       try {
         const detail = await getAuctionDetail(auctionId, user.clienteId);
         applyAuctionDetail(detail);
-      } catch (pollError) {
-        setError(pollError.message);
+        pollingWarningShownRef.current = false;
+      } catch {
+        // Un fallo transitorio de actualizacion no debe tapar la subasta ni
+        // exponer el detalle tecnico que devuelve la infraestructura.
+        if (!pollingWarningShownRef.current) {
+          pollingWarningShownRef.current = true;
+          setToast({
+            message: 'Estamos reconectando la sala. La informacion se actualizara enseguida.',
+            tone: 'danger'
+          });
+        }
+      } finally {
+        pollingRef.current = false;
       }
     }, AUCTION_POLL_INTERVAL_MS);
 
