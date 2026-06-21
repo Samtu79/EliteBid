@@ -283,6 +283,9 @@ function CardForm({ form, updateField }) {
 }
 
 function BankForm({ form, updateField }) {
+  const cbuDigits = onlyDigits(form.cbu);
+  const aliasOk = !form.alias || /^[A-Za-z0-9.-]{6,30}$/.test(form.alias.trim());
+
   return (
     <View style={styles.formCard}>
       <Field
@@ -299,6 +302,13 @@ function BankForm({ form, updateField }) {
         placeholder="Cuenta corriente / Caja de ahorro"
         value={form.accountType}
       />
+      <View style={styles.quickRow}>
+        {['Caja de ahorro', 'Cuenta corriente', 'Cuenta sueldo'].map((type) => (
+          <Pressable key={type} onPress={() => updateField('accountType', type)} style={styles.quickChip}>
+            <Text style={styles.quickChipText}>{type}</Text>
+          </Pressable>
+        ))}
+      </View>
       <Field
         keyboardType="numeric"
         label="CBU / CVU"
@@ -306,6 +316,10 @@ function BankForm({ form, updateField }) {
         onChangeText={(value) => updateField('cbu', onlyDigits(value).slice(0, 22))}
         placeholder="22 digitos"
         value={form.cbu}
+      />
+      <InlineValidation
+        ok={cbuDigits.length === 22}
+        text={cbuDigits.length === 22 ? 'CBU/CVU completo.' : `${cbuDigits.length}/22 digitos`}
       />
       <Field
         autoCapitalize="characters"
@@ -315,11 +329,18 @@ function BankForm({ form, updateField }) {
         placeholder="JUAN.PEREZ.BANCO"
         value={form.alias}
       />
+      <InlineValidation
+        ok={aliasOk && Boolean(form.alias)}
+        text={aliasOk ? 'Alias con formato valido.' : 'Usa letras, numeros, puntos o guiones.'}
+      />
     </View>
   );
 }
 
 function CheckForm({ form, pickCheckImage, updateField }) {
+  const checkDigits = onlyDigits(form.checkNumber);
+  const dateComplete = /^\d{2}\/\d{2}\/\d{4}$/.test(form.issueDate);
+
   return (
     <View style={styles.formCard}>
       <Field
@@ -337,6 +358,10 @@ function CheckForm({ form, pickCheckImage, updateField }) {
         placeholder="0000 0000 0000"
         value={form.checkNumber}
       />
+      <InlineValidation
+        ok={checkDigits.length >= 4 && checkDigits.length <= 20 && !/^0+$/.test(checkDigits)}
+        text={checkDigits ? `${checkDigits.length}/20 digitos` : 'Entre 4 y 20 digitos.'}
+      />
       <Field
         keyboardType="numeric"
         label="Fecha de emision del cheque"
@@ -345,7 +370,13 @@ function CheckForm({ form, pickCheckImage, updateField }) {
         placeholder="DD/MM/AAAA"
         value={form.issueDate}
       />
-      <Text style={styles.fieldHint}>No puede ser posterior a la fecha actual.</Text>
+      <Text style={styles.fieldHint}>Formato DD/MM/AAAA. No puede ser posterior a la fecha actual.</Text>
+      {dateComplete ? (
+        <InlineValidation
+          ok={isValidSlashDate(form.issueDate) && !isFutureSlashDate(form.issueDate)}
+          text={!isValidSlashDate(form.issueDate) ? 'La fecha ingresada no existe.' : isFutureSlashDate(form.issueDate) ? 'La fecha no puede ser futura.' : 'Fecha de emision valida.'}
+        />
+      ) : null}
       <Pressable onPress={pickCheckImage} style={styles.uploadBox}>
         <MaterialCommunityIcons color={colors.primary} name="camera-plus-outline" size={32} />
         <Text style={styles.uploadTitle}>
@@ -353,6 +384,15 @@ function CheckForm({ form, pickCheckImage, updateField }) {
         </Text>
         <Text style={styles.uploadCopy}>Foto clara del cheque certificado.</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function InlineValidation({ ok, text }) {
+  return (
+    <View style={styles.inlineValidation}>
+      <MaterialCommunityIcons color={ok ? '#73E6A2' : colors.onSurfaceVariant} name={ok ? 'check-circle-outline' : 'information-outline'} size={16} />
+      <Text style={[styles.inlineValidationText, ok && styles.inlineValidationTextOk]}>{text}</Text>
     </View>
   );
 }
@@ -382,7 +422,7 @@ function validatePaymentForm(form) {
   }
 
   if (form.type === 'cuenta') {
-    if (!form.bank.trim()) return 'Ingresa el banco.';
+    if (!isValidBankName(form.bank)) return 'Ingresa un banco valido. Ejemplo: Banco Galicia.';
     if (!form.accountType.trim()) return 'Ingresa el tipo de cuenta.';
     if (onlyDigits(form.cbu).length !== 22) return 'El CBU o CVU debe tener 22 digitos.';
     if (!/^[A-Za-z0-9.-]{6,30}$/.test(form.alias.trim())) {
@@ -396,11 +436,11 @@ function validatePaymentForm(form) {
 
   if (form.type === 'cheque') {
     const checkNumberLength = onlyDigits(form.checkNumber).length;
-    if (!form.bank.trim()) return 'Ingresa el banco emisor.';
-    if (checkNumberLength < 4 || checkNumberLength > 20) {
+    if (!isValidBankName(form.bank)) return 'Ingresa el banco emisor. Ejemplo: Banco Nacion.';
+    if (checkNumberLength < 4 || checkNumberLength > 20 || /^0+$/.test(onlyDigits(form.checkNumber))) {
       return 'El numero de cheque debe tener entre 4 y 20 digitos.';
     }
-    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(form.issueDate)) {
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(form.issueDate) || !isValidSlashDate(form.issueDate)) {
       return 'Ingresa la fecha del cheque con formato DD/MM/AAAA.';
     }
     if (isFutureSlashDate(form.issueDate)) {
@@ -410,6 +450,24 @@ function validatePaymentForm(form) {
   }
 
   return '';
+}
+
+function isValidBankName(value) {
+  const text = String(value || '').trim();
+  return text.length >= 3 && /[A-Za-z]/.test(text) && /^[A-Za-z0-9 .,'-]+$/.test(text);
+}
+
+function isValidSlashDate(value) {
+  const [day, month, year] = String(value).split('/').map(Number);
+  const date = new Date(year, month - 1, day);
+  return (
+    Number.isInteger(day) &&
+    Number.isInteger(month) &&
+    Number.isInteger(year) &&
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
 }
 
 function isFutureSlashDate(value) {
@@ -586,6 +644,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     padding: 16
   },
+  inlineValidation: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+    marginTop: -8
+  },
+  inlineValidationText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  inlineValidationTextOk: {
+    color: '#73E6A2'
+  },
   iconButton: {
     alignItems: 'center',
     height: 44,
@@ -660,6 +733,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     textTransform: 'uppercase'
+  },
+  quickChip: {
+    backgroundColor: 'rgba(204, 193, 255, 0.10)',
+    borderColor: 'rgba(204, 193, 255, 0.22)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 8
+  },
+  quickChipText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+    marginTop: -4
   },
   row: {
     flexDirection: 'row',

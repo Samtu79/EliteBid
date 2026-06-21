@@ -336,7 +336,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 3,
     title: 'Porsche 911 Carrera 1973',
-    date: '2026-06-09',
+    date: '2026-07-09',
     time: '20:30',
     status: 'programada',
     category: 'oro',
@@ -405,7 +405,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 7,
     title: 'Coleccion Inicial de Diseno Argentino',
-    date: '2026-06-12',
+    date: '2026-07-12',
     time: '19:30',
     status: 'programada',
     category: 'comun',
@@ -424,6 +424,81 @@ async function seedDatabase() {
         product: 'Lampara de mesa industrial de autor argentino.',
         image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
         basePrice: 95000
+      }
+    ]
+  });
+  await seedAuction({
+    id: 8,
+    title: 'Coleccion de Arte Contemporaneo Federal',
+    date: '2026-07-18',
+    time: '18:45',
+    status: 'programada',
+    category: 'plata',
+    location: 'Museo Puerto Norte',
+    image: 'https://images.unsplash.com/photo-1531913764164-f85c52e6e654?auto=format&fit=crop&w=900&q=80',
+    product: 'Obra mixta sobre tela de artista argentino emergente.',
+    basePrice: 1800000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Escultura en bronce patinado, serie limitada.',
+        image: 'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=900&q=80',
+        basePrice: 2400000
+      },
+      {
+        product: 'Diptico fotografico firmado y certificado.',
+        image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80',
+        basePrice: 950000
+      }
+    ]
+  });
+  await seedAuction({
+    id: 9,
+    title: 'Joyeria Antigua y Relojeria de Autor',
+    date: '2026-08-03',
+    time: '20:15',
+    status: 'programada',
+    category: 'oro',
+    location: 'Salon Alvear',
+    image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=900&q=80',
+    product: 'Anillo art deco en oro blanco con piedra central certificada.',
+    basePrice: 22000000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Reloj de vestir mecanico con caja de oro.',
+        image: 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=80',
+        basePrice: 34000000
+      },
+      {
+        product: 'Collar antiguo con perlas naturales y broche original.',
+        image: 'https://images.unsplash.com/photo-1611085583191-a3b181a88401?auto=format&fit=crop&w=900&q=80',
+        basePrice: 18000000
+      }
+    ]
+  });
+  await seedAuction({
+    id: 10,
+    title: 'Objetos Historicos del Siglo XIX',
+    date: '2026-08-21',
+    time: '19:00',
+    status: 'programada',
+    category: 'comun',
+    location: 'Archivo Central',
+    image: 'https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=900&q=80',
+    product: 'Documento historico encuadernado con certificacion de procedencia.',
+    basePrice: 320000,
+    currentBid: 0,
+    extraItems: [
+      {
+        product: 'Mapa litografiado de Buenos Aires con marco de epoca.',
+        image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=900&q=80',
+        basePrice: 280000
+      },
+      {
+        product: 'Set de plumas y tintero de escritorio, circa 1890.',
+        image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80',
+        basePrice: 160000
       }
     ]
   });
@@ -516,14 +591,16 @@ async function seedProductPhotos(productId, uri) {
   if (!uri) return;
 
   for (let order = 1; order <= 6; order += 1) {
+    const photoUri = `${uri}${uri.includes('?') ? '&' : '?'}photo=${order}`;
     await run(
       `INSERT INTO fotos (producto, uri, orden)
        SELECT ?, ?, ?
        WHERE NOT EXISTS (
          SELECT 1 FROM fotos WHERE producto = ? AND orden = ?
        )`,
-      [productId, uri, order, productId, order]
+      [productId, photoUri, order, productId, order]
     );
+    await run('UPDATE fotos SET uri = ? WHERE producto = ? AND orden = ?', [photoUri, productId, order]);
   }
 }
 

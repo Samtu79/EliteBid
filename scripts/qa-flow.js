@@ -932,6 +932,58 @@ async function main() {
           checkImageUri: 'file:///qa/cheque.jpg'
         })
       }), 'futura');
+    await expectReject('cheque con numero en cero rechazado', () =>
+      request(`/users/${userA.clienteId}/payments`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({
+          type: 'cheque',
+          amount: 100000,
+          bank: 'Banco QA',
+          checkNumber: '000000',
+          issueDate: todaySlashDate(),
+          checkImageUri: 'file:///qa/cheque.jpg'
+        })
+      }), 'ceros');
+    await expectReject('cheque con fecha inexistente rechazado', () =>
+      request(`/users/${userA.clienteId}/payments`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({
+          type: 'cheque',
+          amount: 100000,
+          bank: 'Banco QA',
+          checkNumber: '123456',
+          issueDate: '31/02/2026',
+          checkImageUri: 'file:///qa/cheque.jpg'
+        })
+      }), 'fecha');
+    await expectReject('cheque con banco invalido rechazado', () =>
+      request(`/users/${userA.clienteId}/payments`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({
+          type: 'cheque',
+          amount: 100000,
+          bank: '12345',
+          checkNumber: '123456',
+          issueDate: todaySlashDate(),
+          checkImageUri: 'file:///qa/cheque.jpg'
+        })
+      }), 'banco');
+    await expectReject('cuenta con banco invalido rechazada', () =>
+      request(`/users/${userA.clienteId}/payments`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({
+          type: 'cuenta',
+          amount: 100000,
+          bank: '@@@',
+          accountType: 'Caja de ahorro',
+          cbu: '1234567890123456789012',
+          alias: 'qa.banco.demo'
+        })
+      }), 'banco');
     await expectReject('moneda de pago invalida rechazada', () =>
       request(`/users/${userA.clienteId}/payments`, {
         method: 'POST',

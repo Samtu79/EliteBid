@@ -3341,16 +3341,16 @@ function sanitizePayment(payload) {
       ['cbu', 'Ingresa el CBU o CVU.'],
       ['alias', 'Ingresa el alias.']
     ]);
-    sanitized.bank = normalizeTitleText(sanitized.bank, 'Ingresa un banco valido.');
-    sanitized.accountType = normalizeTitleText(sanitized.accountType, 'Ingresa un tipo de cuenta valido.');
+    sanitized.bank = normalizeBankName(sanitized.bank, 'Ingresa un banco valido. Ejemplo: Banco Galicia.');
+    sanitized.accountType = normalizeAccountType(sanitized.accountType);
     sanitized.cbu = onlyDigits(sanitized.cbu);
     sanitized.alias = normalizeAlias(sanitized.alias);
 
     if (sanitized.cbu.length !== 22) {
-      throw new Error('Ingresa un CBU o CVU de 22 digitos.');
+      throw new Error('El CBU/CVU debe tener exactamente 22 digitos.');
     }
     if (!sanitized.alias) {
-      throw new Error('Ingresa un alias valido.');
+      throw new Error('El alias debe tener entre 6 y 30 caracteres: letras, numeros, puntos o guiones.');
     }
   }
   if (type === 'cheque') {
@@ -3360,18 +3360,48 @@ function sanitizePayment(payload) {
       ['issueDate', 'Ingresa la fecha de emision.'],
       ['checkImageUri', 'Carga una foto del cheque certificado.']
     ]);
-    sanitized.bank = normalizeTitleText(sanitized.bank, 'Ingresa un banco valido.');
-    sanitized.checkNumber = onlyDigits(sanitized.checkNumber);
+    sanitized.bank = normalizeBankName(sanitized.bank, 'Ingresa el banco emisor del cheque. Ejemplo: Banco Nacion.');
+    sanitized.checkNumber = normalizeCheckNumber(sanitized.checkNumber);
     sanitized.issueDate = normalizeDate(sanitized.issueDate, 'Ingresa una fecha de emision valida.');
     sanitized.checkImageUri = sanitizeUri(sanitized.checkImageUri, 'Carga una foto del cheque certificado.');
     assertNotFutureDate(sanitized.issueDate, 'La fecha de emision del cheque no puede ser futura.');
 
     if (sanitized.checkNumber.length < 4 || sanitized.checkNumber.length > 20) {
-      throw new Error('Ingresa un numero de cheque valido.');
+      throw new Error('El numero de cheque debe tener entre 4 y 20 digitos.');
     }
   }
 
   return sanitized;
+}
+
+function normalizeBankName(value, message = 'Ingresa un banco valido.') {
+  const normalized = normalizeTitleText(value, message);
+  if (normalized.length < 3 || !/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(normalized)) {
+    throw new Error(message);
+  }
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .,'-]+$/.test(normalized)) {
+    throw new Error(message);
+  }
+  return normalized;
+}
+
+function normalizeAccountType(value) {
+  const normalized = normalizeTitleText(value, 'Ingresa un tipo de cuenta valido.');
+  const allowed = ['Caja De Ahorro', 'Cuenta Corriente', 'Cuenta Sueldo', 'Cuenta Bancaria'];
+  const directMatch = allowed.find((item) => item.toLowerCase() === normalized.toLowerCase());
+  if (directMatch) return directMatch;
+  if (normalized.length < 4 || normalized.length > 40) {
+    throw new Error('Ingresa un tipo de cuenta valido: Caja de ahorro, Cuenta corriente o Cuenta sueldo.');
+  }
+  return normalized;
+}
+
+function normalizeCheckNumber(value) {
+  const digits = onlyDigits(value);
+  if (!digits || /^0+$/.test(digits)) {
+    throw new Error('El numero de cheque no puede estar vacio ni ser todo ceros.');
+  }
+  return digits;
 }
 
 function normalizePaymentCurrency(value) {
