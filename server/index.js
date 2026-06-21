@@ -4118,17 +4118,35 @@ function capitalizeWord(word) {
 app.use(errorHandler);
 
 const port = Number(process.env.PORT || process.env.API_PORT || 3001);
+let auctionTimerInterval = null;
 
-async function start() {
-  if (process.env.DB_AUTO_INIT !== 'false') await initDatabase();
-  setInterval(() => {
+function startAuctionTimer() {
+  if (auctionTimerInterval) return;
+
+  auctionTimerInterval = setInterval(() => {
     settleExpiredAuctionTimers().catch((error) => {
       console.warn(`No se pudo cerrar subastas vencidas: ${error.message}`);
     });
   }, 1000);
+}
+
+async function start() {
   app.listen(port, '0.0.0.0', () => {
     console.log(`EliteBid API escuchando en http://0.0.0.0:${port}/api`);
   });
+
+  if (process.env.DB_AUTO_INIT === 'false') {
+    startAuctionTimer();
+    return;
+  }
+
+  // Render tiene que poder abrir el puerto aun cuando Clever Cloud este
+  // momentaneamente ocupado. La inicializacion no debe derribar el servicio.
+  void initDatabase()
+    .then(startAuctionTimer)
+    .catch((error) => {
+      console.warn(`Base de datos no disponible al iniciar: ${error.code || 'ERROR'}. La API seguira disponible.`);
+    });
 }
 
 if (require.main === module) {
