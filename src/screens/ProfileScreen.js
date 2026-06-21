@@ -517,10 +517,18 @@ function formatCompactMoney(value) {
   const amount = Number(value || 0);
 
   if (amount >= 1000000) {
-    return `$${(amount / 1000000).toFixed(1)}M`;
+    return `$${formatCompactNumber(amount / 1000000)}M`;
+  }
+
+  if (amount >= 100000) {
+    return `$${formatCompactNumber(amount / 1000)}k`;
   }
 
   return `$${amount.toLocaleString('es-AR')}`;
+}
+
+function formatCompactNumber(value) {
+  return Number(value).toFixed(1).replace(/\.0$/, '');
 }
 
 function formatMoney(value) {
