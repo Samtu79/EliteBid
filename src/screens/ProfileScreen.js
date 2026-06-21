@@ -234,7 +234,13 @@ export default function ProfileScreen({
         </View>
 
         <View style={styles.quickActions}>
-          <QuickAction disabled={guest} icon="gavel" label="Mis Pujas" onPress={guest ? undefined : onOpenWonBids} />
+          <QuickAction
+            badge={profile?.auctionsWon}
+            disabled={guest}
+            icon="package-variant-closed-check"
+            label="Ganados"
+            onPress={guest ? undefined : onOpenWonBids}
+          />
           <QuickAction
             disabled={guest}
             icon="credit-card-outline"
@@ -408,13 +414,18 @@ function Stat({ label, tone, value }) {
   );
 }
 
-function QuickAction({ disabled, icon, label, onPress }) {
+function QuickAction({ badge, disabled, icon, label, onPress }) {
   return (
     <Pressable disabled={disabled} onPress={onPress} style={[styles.quickAction, disabled && styles.quickActionDisabled]}>
       <View style={styles.quickIcon}>
         <MaterialCommunityIcons color={colors.primary} name={icon} size={24} />
       </View>
       <Text style={styles.quickText}>{label}</Text>
+      {Number(badge || 0) > 0 ? (
+        <View style={styles.quickBadge}>
+          <Text style={styles.quickBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -800,11 +811,28 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
     minHeight: 96,
+    position: 'relative',
     justifyContent: 'center',
     padding: 12
   },
   quickActionDisabled: {
     opacity: 0.45
+  },
+  quickBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    height: 20,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 20
+  },
+  quickBadgeText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 10,
+    fontWeight: '900'
   },
   quickActions: {
     flexDirection: 'row',

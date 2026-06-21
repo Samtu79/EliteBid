@@ -716,8 +716,10 @@ app.get('/api/usuarios/me/compras/:bidId/tracking', wrap(async (req, res) => {
   if (!purchase) throw new Error('No encontramos esa compra.');
   res.json({
     compraId: bidId,
-    estado: purchase.deliveryAddress ? 'preparando_envio' : 'pendiente_direccion',
-    ubicacionEstimada: purchase.deliveryAddress ? 'Deposito EliteBid' : null,
+    estado: purchase.paymentStatus !== 'pagada'
+      ? 'pago_pendiente'
+      : purchase.deliveryAddress ? 'preparando_envio' : 'pendiente_direccion',
+    ubicacionEstimada: purchase.paymentStatus === 'pagada' && purchase.deliveryAddress ? 'Deposito EliteBid' : null,
     fechaEstimadaEntrega: null,
     direccionEnvio: purchase.deliveryAddress ?? null
   });
@@ -2701,6 +2703,11 @@ async function getUserPurchases(clienteId) {
       r.direccion_entrega AS deliveryAddress,
       ? AS shippingCost, (p.importe + i.comision + ?) AS totalDue,
       COALESCE(r.estado_pago, 'pendiente') AS paymentStatus,
+      CASE
+        WHEN COALESCE(r.estado_pago, 'pendiente') <> 'pagada' THEN 'pago_pendiente'
+        WHEN r.direccion_entrega IS NULL OR TRIM(r.direccion_entrega) = '' THEN 'pendiente_direccion'
+        ELSE 'preparando_envio'
+      END AS deliveryStatus,
       COALESCE(prod.imagen_uri, s.imagen_uri) AS imageUrl
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente

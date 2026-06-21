@@ -122,7 +122,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
         <Pressable onPress={onBack} style={styles.iconButton}>
           <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
         </Pressable>
-        <Text style={styles.logo}>Mis Pujas</Text>
+        <Text style={styles.logo}>Mis Ganados</Text>
         <View style={styles.iconButton} />
       </View>
 
@@ -137,15 +137,15 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Pujas ganadas</Text>
-            <Text style={styles.subtitle}>Carga la direccion de entrega de cada pieza adjudicada.</Text>
+            <Text style={styles.title}>Productos ganados</Text>
+            <Text style={styles.subtitle}>Revisa el pago, carga tu domicilio cuando puedas y segui el estado de cada entrega.</Text>
           </View>
 
           {purchases.length === 0 ? (
             <View style={styles.emptyState}>
               <MaterialCommunityIcons color={colors.primary} name="gavel" size={42} />
-              <Text style={styles.emptyTitle}>Sin pujas ganadas</Text>
-              <Text style={styles.emptyCopy}>Cuando ganes una subasta finalizada, va a aparecer aca.</Text>
+              <Text style={styles.emptyTitle}>Sin productos ganados</Text>
+              <Text style={styles.emptyCopy}>Cuando ganes una pieza, va a aparecer aca con su pago y estado de entrega.</Text>
             </View>
           ) : (
             <View style={styles.list}>
@@ -158,11 +158,11 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
                   <View style={styles.cardBody}>
                     <View style={styles.cardHeader}>
                       <View style={styles.cardTitleWrap}>
-                        <Text style={styles.cardMeta}>Subasta ganada</Text>
+                        <Text style={styles.cardMeta}>Pieza adjudicada</Text>
                         <Text numberOfLines={2} style={styles.cardTitle}>{purchase.title}</Text>
                       </View>
-                      <View style={[styles.statusPill, purchase.paymentStatus === 'multa' && styles.statusDanger]}>
-                        <Text style={styles.statusText}>{getPaymentStatusLabel(purchase)}</Text>
+                      <View style={[styles.statusPill, getStatusTone(purchase) === 'danger' && styles.statusDanger, getStatusTone(purchase) === 'success' && styles.statusSuccess]}>
+                        <Text style={styles.statusText}>{getPurchaseStatusLabel(purchase)}</Text>
                       </View>
                     </View>
 
@@ -171,26 +171,28 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
                       <Amount label="Comision" value={formatMoney(purchase.commission)} />
                       <Amount label="Envio" value={formatMoney(purchase.shippingCost)} />
                     </View>
-                    <Text style={styles.total}>Total a pagar {formatMoney(purchase.totalDue)}</Text>
-                    <Pressable
-                      disabled={payingId === purchase.id || purchase.paymentStatus === 'pagada'}
-                      onPress={() => confirmPayment(purchase)}
-                      style={[
-                        styles.payButton,
-                        purchase.paymentStatus === 'pagada' && styles.buttonDisabled
-                      ]}
-                    >
-                      {payingId === purchase.id ? (
-                        <ActivityIndicator color={colors.onPrimaryFixed} />
-                      ) : (
-                        <>
-                          <Text style={styles.payButtonText}>
-                            {purchase.paymentStatus === 'pagada' ? 'Pago confirmado' : 'Confirmar pago'}
-                          </Text>
-                          <MaterialCommunityIcons color={colors.onPrimaryFixed} name="cash-check" size={18} />
-                        </>
-                      )}
-                    </Pressable>
+                    <Text style={styles.total}>{purchase.paymentStatus === 'pagada' ? 'Total debitado' : 'Total a pagar'} {formatMoney(purchase.totalDue)}</Text>
+                    {purchase.paymentStatus === 'pagada' ? (
+                      <View style={styles.paidNotice}>
+                        <MaterialCommunityIcons color="#73E6A2" name="check-decagram" size={18} />
+                        <Text style={styles.paidNoticeText}>Pago acreditado con tu medio seleccionado.</Text>
+                      </View>
+                    ) : (
+                      <Pressable
+                        disabled={payingId === purchase.id}
+                        onPress={() => confirmPayment(purchase)}
+                        style={styles.payButton}
+                      >
+                        {payingId === purchase.id ? (
+                          <ActivityIndicator color={colors.onPrimaryFixed} />
+                        ) : (
+                          <>
+                            <Text style={styles.payButtonText}>Confirmar pago</Text>
+                            <MaterialCommunityIcons color={colors.onPrimaryFixed} name="cash-check" size={18} />
+                          </>
+                        )}
+                      </Pressable>
+                    )}
 
                     <Text style={styles.fieldLabel}>Direccion de entrega</Text>
                     <TextInput
@@ -243,10 +245,16 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
   );
 }
 
-function getPaymentStatusLabel(purchase) {
-  if (purchase.paymentStatus === 'pagada') return 'Pago confirmado';
+function getPurchaseStatusLabel(purchase) {
   if (purchase.paymentStatus === 'multa') return 'Multa activa';
-  return purchase.deliveryAddress ? 'Falta pago' : 'Falta pago y entrega';
+  if (purchase.paymentStatus !== 'pagada') return 'Pago pendiente';
+  if (purchase.deliveryStatus === 'pendiente_direccion') return 'Falta domicilio';
+  return 'En preparacion';
+}
+
+function getStatusTone(purchase) {
+  if (purchase.paymentStatus === 'multa' || purchase.paymentStatus !== 'pagada') return 'danger';
+  return purchase.deliveryStatus === 'preparando_envio' ? 'success' : 'neutral';
 }
 
 function Amount({ label, value }) {
@@ -398,6 +406,23 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
+  paidNotice: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(115, 230, 162, 0.1)',
+    borderColor: 'rgba(115, 230, 162, 0.28)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    padding: 11
+  },
+  paidNoticeText: {
+    color: '#9BF0BE',
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800'
+  },
   list: {
     gap: 16
   },
@@ -439,6 +464,10 @@ const styles = StyleSheet.create({
   statusDanger: {
     backgroundColor: 'rgba(255, 180, 171, 0.14)',
     borderColor: 'rgba(255, 180, 171, 0.38)'
+  },
+  statusSuccess: {
+    backgroundColor: 'rgba(115, 230, 162, 0.12)',
+    borderColor: 'rgba(115, 230, 162, 0.34)'
   },
   statusText: {
     color: colors.primary,
