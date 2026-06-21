@@ -28,6 +28,20 @@ function Resolve-NgrokPath {
   throw "No se encontro 'ngrok'. Instalalo con: winget install --id Ngrok.Ngrok -e"
 }
 
+function Resolve-DockerPath {
+  $command = Get-Command docker -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  $dockerDesktopPath = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+  if (Test-Path $dockerDesktopPath) {
+    return $dockerDesktopPath
+  }
+
+  return $null
+}
+
 function Wait-Http {
   param(
     [string]$Url,
@@ -120,12 +134,17 @@ function Get-NgrokPublicUrl {
 Push-Location (Resolve-Path "$PSScriptRoot\..")
 
 try {
-  Require-Command docker
   Require-Command npm
   $ngrokPath = Resolve-NgrokPath
+  $dockerPath = Resolve-DockerPath
 
-  Write-Host "Levantando MySQL con Docker Compose..."
-  docker compose up -d $ComposeService
+  if ($dockerPath) {
+    Write-Host "Levantando MySQL con Docker Compose..."
+    & $dockerPath compose up -d $ComposeService
+  } else {
+    Write-Host "No se encontro Docker en PATH. Sigo sin levantar contenedor; uso el MySQL ya disponible para db:init."
+    Write-Host "Si necesitas Docker, instala/abre Docker Desktop y reinicia la terminal."
+  }
 
   Write-Host "Inicializando base de datos..."
   Invoke-WithRetry -Label "MySQL/db:init" -Command { npm run db:init }
