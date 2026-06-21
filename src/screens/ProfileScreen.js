@@ -46,6 +46,7 @@ export default function ProfileScreen({
   const [saving, setSaving] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const [categorySummary, setCategorySummary] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -54,23 +55,26 @@ export default function ProfileScreen({
     let mounted = true;
 
     async function load() {
-      const [data, summary] = await Promise.all([
-        getUserProfile(user.clienteId),
-        user.rol === 'invitado' ? Promise.resolve(null) : getUserSummary(user.clienteId)
-      ]);
+      try {
+        // El resumen de categoria tiene consultas de metricas adicionales.
+        // No debe demorar la apertura normal del perfil.
+        const data = await getUserProfile(user.clienteId);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setProfile(data);
-      setCategorySummary(summary);
-      setForm({
-        firstName: data?.identityFirstName ?? '',
-        lastName: data?.identityLastName ?? '',
-        email: data?.email ?? '',
-        documento: data?.documento ?? '',
-        legalAddress: data?.legalAddress ?? ''
-      });
-      setLoading(false);
+        setProfile(data);
+        setForm({
+          firstName: data?.identityFirstName ?? '',
+          lastName: data?.identityLastName ?? '',
+          email: data?.email ?? '',
+          documento: data?.documento ?? '',
+          legalAddress: data?.legalAddress ?? ''
+        });
+      } catch (loadError) {
+        if (mounted) setError(loadError.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     }
 
     load();
@@ -79,6 +83,20 @@ export default function ProfileScreen({
       mounted = false;
     };
   }, [user.clienteId]);
+
+  async function openCategoryModal() {
+    setCategoryModalVisible(true);
+    if (user.rol === 'invitado' || categorySummary || categoryLoading) return;
+
+    setCategoryLoading(true);
+    try {
+      setCategorySummary(await getUserSummary(user.clienteId));
+    } catch (summaryError) {
+      setError(summaryError.message);
+    } finally {
+      setCategoryLoading(false);
+    }
+  }
 
   function updateField(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -173,6 +191,7 @@ export default function ProfileScreen({
         </Pressable>
       </View>
       <CategoryModal
+        loading={categoryLoading}
         onClose={() => setCategoryModalVisible(false)}
         summary={categorySummary}
         visible={categoryModalVisible}
@@ -199,7 +218,7 @@ export default function ProfileScreen({
           <Text style={styles.name}>{profile?.fullName}</Text>
           <Pressable
             disabled={guest}
-            onPress={() => setCategoryModalVisible(true)}
+            onPress={openCategoryModal}
             style={[styles.badge, guest && styles.badgeDisabled]}
           >
             <MaterialCommunityIcons color={colors.primary} name="check-decagram" size={16} />
@@ -400,7 +419,7 @@ function QuickAction({ disabled, icon, label, onPress }) {
   );
 }
 
-function CategoryModal({ onClose, summary, visible }) {
+function CategoryModal({ loading, onClose, summary, visible }) {
   const currentRule = summary?.categoryRequirements?.find((rule) => rule.category === summary.currentCategory);
   const nextRule = summary?.nextCategoryRequirement;
 
@@ -422,7 +441,12 @@ function CategoryModal({ onClose, summary, visible }) {
             {currentRule?.description ?? 'La categoria define en que subastas podes participar.'}
           </Text>
 
-          {nextRule ? (
+          {loading ? (
+            <View style={styles.categoryLoading}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.modalCopy}>Cargando progreso de categoria...</Text>
+            </View>
+          ) : nextRule ? (
             <>
               <View style={styles.nextCategoryBox}>
                 <Text style={styles.nextCategoryLabel}>Proxima categoria</Text>
@@ -898,6 +922,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8
+  },
+  categoryLoading: {
+    alignItems: 'center',
+    gap: 12,
+    justifyContent: 'center',
+    minHeight: 130
   },
   modalBackdrop: {
     alignItems: 'center',

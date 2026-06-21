@@ -149,7 +149,10 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
             </View>
           ) : (
             <View style={styles.list}>
-              {purchases.map((purchase) => (
+              {purchases.map((purchase) => {
+                const hasSavedDelivery = Boolean(purchase.deliveryAddress?.trim());
+
+                return (
                 <View key={purchase.id} style={styles.card}>
                   <Image source={{ uri: purchase.imageUrl }} style={styles.image} />
                   <View style={styles.cardBody}>
@@ -191,6 +194,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
 
                     <Text style={styles.fieldLabel}>Direccion de entrega</Text>
                     <TextInput
+                      editable={!hasSavedDelivery && savingId !== purchase.id}
                       multiline
                       onChangeText={(value) => updateAddress(purchase.id, value)}
                       placeholder="Calle, numero, piso/depto, ciudad"
@@ -199,22 +203,29 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
                       value={addresses[purchase.id] || ''}
                     />
                     <Pressable
-                      disabled={savingId === purchase.id}
+                      disabled={savingId === purchase.id || hasSavedDelivery}
                       onPress={() => saveAddress(purchase)}
-                      style={styles.saveButton}
+                      style={[styles.saveButton, hasSavedDelivery && styles.buttonDisabled]}
                     >
                       {savingId === purchase.id ? (
                         <ActivityIndicator color={colors.onPrimaryFixed} />
                       ) : (
                         <>
-                          <Text style={styles.saveButtonText}>Guardar entrega</Text>
-                          <MaterialCommunityIcons color={colors.onPrimaryFixed} name="truck-delivery-outline" size={18} />
+                          <Text style={styles.saveButtonText}>
+                            {hasSavedDelivery ? 'Entrega guardada' : 'Guardar entrega'}
+                          </Text>
+                          <MaterialCommunityIcons
+                            color={colors.onPrimaryFixed}
+                            name={hasSavedDelivery ? 'check-circle-outline' : 'truck-delivery-outline'}
+                            size={18}
+                          />
                         </>
                       )}
                     </Pressable>
                   </View>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </ScrollView>
