@@ -1353,6 +1353,9 @@ async function settlePurchase(clienteId, bidId) {
   );
 
   if (!purchase) throw new Error('No encontramos una compra pendiente para esa puja.');
+  if (purchase.paymentStatus === 'pagada') {
+    return { paid: true, alreadyPaid: true };
+  }
   const totalDue = Number(purchase.amount || 0) + Number(purchase.commission || 0) + SHIPPING_COST;
   const payment = purchase.paymentMethodId
     ? await first(
@@ -1370,6 +1373,12 @@ async function settlePurchase(clienteId, bidId) {
     throw new Error(`Fondos insuficientes para confirmar el pago. Se genero una multa del 10% de la oferta (${formatMoney(Number(purchase.amount || 0) * 0.1)}). Debes pagarla y presentar los fondos dentro de las 72 horas.`);
   }
 
+  const captured = await captureWinningPayment(clienteId, purchase.paymentMethodId, totalDue);
+  if (!captured) {
+    await registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds);
+    throw new Error('No pudimos debitar el total de tu medio de pago. Se genero una multa y debes presentar fondos.');
+  }
+
   if (purchase.receiptId) {
     await run('UPDATE registro_de_subasta SET estado_pago = ? WHERE identificador = ?', ['pagada', purchase.receiptId]);
   } else {
@@ -1380,6 +1389,19 @@ async function settlePurchase(clienteId, bidId) {
     );
     await run('UPDATE items_catalogo SET subastado = ? WHERE identificador = ?', ['si', purchase.itemId]);
   }
+
+  return { paid: true, totalDue };
+}
+
+async function captureWinningPayment(clienteId, paymentMethodId, totalDue) {
+  if (!paymentMethodId || totalDue <= 0) return false;
+  const result = await run(
+    `UPDATE medios_pago
+     SET monto_garantia = monto_garantia - ?
+     WHERE identificador = ? AND cliente = ? AND verificado = 'si' AND monto_garantia >= ?`,
+    [totalDue, paymentMethodId, clienteId, totalDue]
+  );
+  return Number(result.affectedRows || 0) === 1;
 }
 
 async function registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds) {
@@ -1759,6 +1781,7 @@ async function getAuctionDetail(auctionId, clienteId) {
     catalog: await getAuctionCatalogLots(auctionId, viewer),
     bidFeed: restrictedCatalog ? [] : await getAuctionBidFeed(auction.itemId),
     closure: restrictedCatalog ? null : await getAuctionClosure(auction.itemId, clienteId),
+    recentWin: restrictedCatalog ? null : await getRecentAuctionWin(auctionId, clienteId),
     isFavorite: restrictedCatalog ? false : await isFavoriteAuction(clienteId, auctionId),
     eligibility: {
       categoryOk: !restrictedCatalog && await hasCategoryAccess(clienteId, auction.category),
@@ -1879,7 +1902,9 @@ async function resolveBidPayment(clienteId, paymentMethodId, amount) {
       `SELECT COALESCE(SUM(p.importe), 0) AS total
        FROM pujos p
        JOIN asistentes a ON a.identificador = p.asistente
-       WHERE a.cliente = ? AND p.medio_pago = ? AND p.ganador = 'si'`,
+       JOIN items_catalogo i ON i.identificador = p.item
+       WHERE a.cliente = ? AND p.medio_pago = ? AND p.ganador = 'si'
+         AND i.cierre_estado = 'en_cuenta'`,
       [clienteId, payment.id]
     );
     const nextTotal = Number(used?.total || 0) + Number(amount || 0);
@@ -1978,6 +2003,26 @@ async function settleExpiredAuctionTimers() {
   }
 }
 
+async function getRecentAuctionWin(auctionId, clienteId) {
+  if (!clienteId) return null;
+  return first(
+    `SELECT i.identificador AS itemId, p.importe AS amount, i.comision AS commission,
+      prod.descripcion_catalogo AS itemTitle, p.identificador AS bidId,
+      r.estado_pago AS paymentStatus
+     FROM pujos p
+     JOIN asistentes a ON a.identificador = p.asistente
+     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN productos prod ON prod.identificador = i.producto
+     LEFT JOIN registro_de_subasta r ON r.subasta = c.subasta AND r.producto = prod.identificador AND r.cliente = a.cliente
+     WHERE c.subasta = ? AND a.cliente = ? AND p.ganador = 'si'
+       AND i.cierre_estado = 'finalizada'
+     ORDER BY p.identificador DESC
+     LIMIT 1`,
+    [auctionId, clienteId]
+  );
+}
+
 async function restoreClosedDemoAuctions() {
   const placeholders = DEMO_LIVE_AUCTION_IDS.map(() => '?').join(', ');
   const closedRooms = await query(
@@ -2039,6 +2084,11 @@ async function finalizeAuctionItem(itemId) {
   const amount = Number(lastBid?.amount ?? item.basePrice);
   const paymentMethodId = lastBid?.paymentMethodId ?? null;
   const reason = lastBid ? 'adjudicada_por_tiempo' : 'compra_empresa_sin_pujas';
+  const totalDue = amount + Number(item.commission || 0) + SHIPPING_COST;
+  const paidAutomatically = lastBid
+    ? await captureWinningPayment(buyerClientId, paymentMethodId, totalDue)
+    : false;
+  const paymentStatus = paidAutomatically ? 'pagada' : 'pendiente';
 
   if (lastBid) {
     await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', itemId]);
@@ -2057,7 +2107,14 @@ async function finalizeAuctionItem(itemId) {
     await run(
       `INSERT INTO registro_de_subasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, 'pendiente']
+      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, paymentStatus]
+    );
+  } else if (lastBid) {
+    await run(
+      `UPDATE registro_de_subasta
+       SET medio_pago = ?, importe = ?, comision = ?, estado_pago = ?
+       WHERE identificador = ?`,
+      [paymentMethodId, amount, item.commission, paymentStatus, receipt.id]
     );
   }
 

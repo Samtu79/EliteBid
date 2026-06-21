@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import { colors, radii } from '../theme';
 
 const SHIPPING_COST = 25000;
 const BID_RANGE_LIMIT_CATEGORIES = new Set(['comun', 'especial', 'plata']);
+const AUCTION_POLL_INTERVAL_MS = 800;
 
 export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpenNotifications, user }) {
   const [auction, setAuction] = useState(null);
@@ -32,6 +34,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [toast, setToast] = useState(null);
+  const [winnerCelebration, setWinnerCelebration] = useState(null);
+  const amountRef = useRef('');
+  const userEditedAmountRef = useRef(false);
+  const leadingItemIdRef = useRef(null);
+  const celebratedWinIdsRef = useRef(new Set());
   const leadingActive = Boolean(
     auction?.closure?.winner?.isCurrentUser &&
       auction?.closureStatus === 'en_cuenta' &&
@@ -42,9 +49,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   async function load() {
     const detail = await getAuctionDetail(auctionId, user.clienteId);
 
-    setAuction(detail);
-    setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
-    syncAmountWithAuction(detail);
+    applyAuctionDetail(detail);
     setLoading(false);
   }
 
@@ -60,11 +65,9 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         const verifiedPayments = userPayments.filter((payment) => payment.verified === 'si');
 
         if (mounted) {
-          setAuction(detail);
+          applyAuctionDetail(detail, { forceSuggestedBid: true });
           setPayments(verifiedPayments);
           setSelectedPaymentId((current) => current ?? verifiedPayments[0]?.id ?? null);
-          setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
-          setAmount(formatInputAmount(getSuggestedBid(detail)));
         }
       } catch (loadError) {
         if (mounted) {
@@ -96,13 +99,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     const poll = setInterval(async () => {
       try {
         const detail = await getAuctionDetail(auctionId, user.clienteId);
-        setAuction(detail);
-        setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
-        syncAmountWithAuction(detail);
+        applyAuctionDetail(detail);
       } catch (pollError) {
         setError(pollError.message);
       }
-    }, 2000);
+    }, AUCTION_POLL_INTERVAL_MS);
 
     return () => clearInterval(poll);
   }, [auctionId, user.clienteId]);
@@ -149,7 +150,10 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       nextAmount = Math.min(rules.maxBid, nextAmount);
     }
 
-    setAmount(formatInputAmount(nextAmount));
+    const formattedAmount = formatInputAmount(nextAmount);
+    amountRef.current = formattedAmount;
+    userEditedAmountRef.current = true;
+    setAmount(formattedAmount);
     setError('');
     setMessage('');
     setToast(null);
@@ -171,9 +175,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
       const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
 
-      setAuction(result.auction);
-      setSecondsRemaining(Number(result.auction.closure?.secondsRemaining ?? result.auction.timerSecondsRemaining ?? 0));
-      setAmount(formatInputAmount(getSuggestedBid(result.auction)));
+      applyAuctionDetail(result.auction, { forceSuggestedBid: true });
       setMessage('Puja confirmada. El contador volvio a 1 minuto.');
       setToast({ message: 'Puja registrada. Vas liderando este lote.', tone: 'success' });
       await load();
@@ -187,20 +189,52 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
   function showLeadingLock() {
     setToast({
-      message: 'Vas primero. Podes salir; si te superan vas a verlo en notificaciones.',
-      tone: 'success'
+      message: 'Vas primero: no podes salir de la sala hasta que te superen o ganes la pieza.',
+      tone: 'danger'
     });
   }
 
   function guardRoomExit(callback) {
     if (leadingActive) {
       showLeadingLock();
+      return;
     }
 
     callback?.();
   }
 
-  function syncAmountWithAuction(detail) {
+  function applyAuctionDetail(detail, { forceSuggestedBid = false } = {}) {
+    setAuction(detail);
+    setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
+    if (
+      detail?.closure?.winner?.isCurrentUser &&
+      detail?.closureStatus === 'en_cuenta' &&
+      detail?.status !== 'cerrada'
+    ) {
+      leadingItemIdRef.current = Number(detail.itemId);
+    }
+
+    const recentWin = detail?.recentWin;
+    if (
+      recentWin &&
+      Number(recentWin.itemId) === Number(leadingItemIdRef.current) &&
+      !celebratedWinIdsRef.current.has(Number(recentWin.itemId))
+    ) {
+      celebratedWinIdsRef.current.add(Number(recentWin.itemId));
+      leadingItemIdRef.current = null;
+      setWinnerCelebration({
+        amount: Number(recentWin.amount || 0),
+        commission: Number(recentWin.commission || 0),
+        itemTitle: recentWin.itemTitle || 'la pieza',
+        paid: recentWin.paymentStatus === 'pagada',
+        total: Number(recentWin.amount || 0) + Number(recentWin.commission || 0) + SHIPPING_COST
+      });
+    }
+
+    syncAmountWithAuction(detail, forceSuggestedBid);
+  }
+
+  function syncAmountWithAuction(detail, forceSuggestedBid = false) {
     const currentUserLeads = Boolean(
       detail?.closure?.winner?.isCurrentUser &&
         detail?.closureStatus === 'en_cuenta' &&
@@ -208,8 +242,13 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         Number(detail?.closure?.secondsRemaining ?? detail?.timerSecondsRemaining ?? 0) > 0
     );
 
-    if (!currentUserLeads) {
-      setAmount(formatInputAmount(getSuggestedBid(detail)));
+    const currentAmount = parseCurrency(amountRef.current);
+    const currentBid = Number(detail?.currentBid || detail?.basePrice || 0);
+    if (forceSuggestedBid || (!currentUserLeads && (!userEditedAmountRef.current || currentAmount <= currentBid))) {
+      const suggested = formatInputAmount(getSuggestedBid(detail));
+      amountRef.current = suggested;
+      userEditedAmountRef.current = false;
+      setAmount(suggested);
     }
   }
 
@@ -347,6 +386,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                 editable={!finalized && !sending && !leadingActive}
                 keyboardType="numeric"
                 onChangeText={(value) => {
+                  amountRef.current = value;
+                  userEditedAmountRef.current = true;
                   setAmount(value);
                   setError('');
                   setMessage('');
@@ -371,7 +412,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                   const selected = Number(selectedPaymentId) === Number(payment.id);
                   return (
                     <Pressable
-                      disabled={finalized || sending}
+                      disabled={finalized || sending || leadingActive}
                       key={payment.id}
                       onPress={() => setSelectedPaymentId(payment.id)}
                       style={[styles.paymentChip, selected && styles.paymentChipSelected]}
@@ -392,6 +433,9 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                 ) : null}
               </View>
             </ScrollView>
+            {leadingActive ? (
+              <Text style={styles.paymentLockedText}>Tu oferta líder quedó asociada a este único medio de pago.</Text>
+            ) : null}
           </View>
 
           <View style={styles.rangeRow}>
@@ -422,7 +466,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
           <Pressable onPress={() => guardRoomExit(onBack)} style={[styles.watchButton, leadingActive && styles.watchButtonLocked]}>
             <Text style={[styles.watchButtonText, leadingActive && styles.watchButtonTextLocked]}>
-              {leadingActive ? 'Salir y esperar notificacion' : 'Solo ver subasta'}
+              {leadingActive ? 'No podes salir mientras lideras' : 'Solo ver subasta'}
             </Text>
           </Pressable>
 
@@ -458,7 +502,36 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         tone={toast?.tone}
         visible={Boolean(toast)}
       />
+      <WinnerCelebration celebration={winnerCelebration} onClose={() => setWinnerCelebration(null)} />
     </View>
+  );
+}
+
+function WinnerCelebration({ celebration, onClose }) {
+  if (!celebration) return null;
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible>
+      <View style={styles.winnerOverlay}>
+        <View style={styles.winnerCard}>
+          <View style={styles.winnerStars}>
+            <MaterialCommunityIcons color="#F4C56A" name="star-four-points" size={25} />
+            <MaterialCommunityIcons color="#73E6A2" name="trophy" size={54} />
+            <MaterialCommunityIcons color="#F4C56A" name="star-four-points" size={25} />
+          </View>
+          <Text style={styles.winnerTitle}>¡Ganaste!</Text>
+          <Text style={styles.winnerItem}>{celebration.itemTitle}</Text>
+          <Text style={styles.winnerText}>
+            {celebration.paid
+              ? `Se debitó ${formatMoney(celebration.total)}: puja, comisión y envío incluidos.`
+              : `Ganaste la pieza. El total es ${formatMoney(celebration.total)} y quedó pendiente de cobro.`}
+          </Text>
+          <Pressable onPress={onClose} style={styles.winnerButton}>
+            <Text style={styles.winnerButtonText}>Continuar</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -840,6 +913,13 @@ const styles = StyleSheet.create({
     marginBottom: 9,
     textTransform: 'uppercase'
   },
+  paymentLockedText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 8
+  },
   paymentOptions: {
     flexDirection: 'row',
     gap: 8,
@@ -1028,5 +1108,64 @@ const styles = StyleSheet.create({
   },
   watchButtonTextLocked: {
     color: colors.error
+  },
+  winnerButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    height: 50,
+    justifyContent: 'center',
+    marginTop: 20
+  },
+  winnerButtonText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  winnerCard: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: 'rgba(244, 197, 106, 0.5)',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    maxWidth: 380,
+    padding: 26,
+    width: '88%'
+  },
+  winnerItem: {
+    color: colors.onSurface,
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 22,
+    marginTop: 8,
+    textAlign: 'center'
+  },
+  winnerOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(10, 2, 23, 0.82)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24
+  },
+  winnerStars: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 15,
+    justifyContent: 'center'
+  },
+  winnerText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 12,
+    textAlign: 'center'
+  },
+  winnerTitle: {
+    color: '#F4C56A',
+    fontSize: 28,
+    fontWeight: '900',
+    marginTop: 14,
+    textAlign: 'center'
   }
 });
