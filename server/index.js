@@ -1702,7 +1702,6 @@ async function getAuctionRows(viewer = null) {
      ) catalogo_actual ON catalogo_actual.catalogo = c.identificador
      JOIN items_catalogo i ON i.catalogo = c.identificador AND i.orden_lote = catalogo_actual.orden_actual
      JOIN productos p ON p.identificador = i.producto
-     ${restrictedCatalog ? "WHERE s.estado = 'programada'" : ''}
      ORDER BY CASE s.estado WHEN 'abierta' THEN 0 WHEN 'programada' THEN 1 ELSE 2 END, s.fecha ASC`
   );
 
