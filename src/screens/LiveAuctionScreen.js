@@ -70,7 +70,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         if (mounted) {
           applyAuctionDetail(detail, { forceSuggestedBid: true });
           setPayments(verifiedPayments);
-          setSelectedPaymentId((current) => current ?? verifiedPayments[0]?.id ?? null);
+          setSelectedPaymentId(verifiedPayments.find((payment) => payment.selected === 'si')?.id ?? verifiedPayments[0]?.id ?? null);
         }
       } catch (loadError) {
         if (mounted) {
@@ -229,9 +229,6 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
     setAuction(detail);
     setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
-    if (detail?.lockedPaymentMethodId) {
-      setSelectedPaymentId(Number(detail.lockedPaymentMethodId));
-    }
     if (
       detail?.closure?.winner?.isCurrentUser &&
       detail?.closureStatus === 'en_cuenta' &&
@@ -307,7 +304,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const waitingForFirstBid = auction.closureStatus === 'esperando_puja' && !finalized && secondsRemaining > 0;
   const technicalClosing = !finalized && secondsRemaining === 0 && (counting || auction.closureStatus === 'esperando_puja');
   const bidDisabled = sending || finalized || !selectedPaymentId || leadingActive;
-  const lockedPaymentMethodId = auction.lockedPaymentMethodId ? Number(auction.lockedPaymentMethodId) : null;
+  const selectedPayment = payments.find((payment) => Number(payment.id) === Number(selectedPaymentId));
 
   return (
     <View style={styles.container}>
@@ -432,38 +429,15 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
           <View style={styles.paymentPanel}>
             <Text style={styles.paymentLabel}>Medio de pago para esta puja</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.paymentOptions}>
-                {payments.map((payment) => {
-                  const selected = Number(selectedPaymentId) === Number(payment.id);
-                  return (
-                    <Pressable
-                      disabled={finalized || sending || leadingActive || Boolean(lockedPaymentMethodId)}
-                      key={payment.id}
-                      onPress={() => setSelectedPaymentId(payment.id)}
-                      style={[styles.paymentChip, selected && styles.paymentChipSelected]}
-                    >
-                      <MaterialCommunityIcons
-                        color={selected ? colors.onPrimaryFixed : colors.primary}
-                        name={getPaymentIcon(payment.type)}
-                        size={16}
-                      />
-                      <Text style={[styles.paymentChipText, selected && styles.paymentChipTextSelected]}>
-                        {getPaymentLabel(payment)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-                {payments.length === 0 ? (
-                  <Text style={styles.noPaymentText}>No hay medios verificados.</Text>
-                ) : null}
+            {selectedPayment ? (
+              <View style={[styles.paymentChip, styles.paymentChipSelected]}>
+                <MaterialCommunityIcons color={colors.onPrimaryFixed} name={getPaymentIcon(selectedPayment.type)} size={16} />
+                <Text style={[styles.paymentChipText, styles.paymentChipTextSelected]}>{getPaymentLabel(selectedPayment)}</Text>
               </View>
-            </ScrollView>
-            {leadingActive ? (
-              <Text style={styles.paymentLockedText}>Tu oferta lider quedo asociada a este unico medio de pago.</Text>
-            ) : lockedPaymentMethodId ? (
-              <Text style={styles.paymentLockedText}>Entraste a esta subasta con este medio de pago. Las siguientes pujas usan el mismo.</Text>
-            ) : null}
+            ) : (
+              <Text style={styles.noPaymentText}>No hay medios verificados.</Text>
+            )}
+            <Text style={styles.paymentLockedText}>Elegido en Pagos. Para cambiarlo, hacelo antes de entrar a una subasta.</Text>
           </View>
 
           <View style={styles.rangeRow}>

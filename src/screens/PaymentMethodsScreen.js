@@ -11,7 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { deletePaymentMethod, getPaymentMethods } from '../backend/paymentService';
+import { deletePaymentMethod, getPaymentMethods, selectPaymentMethod } from '../backend/paymentService';
 import { colors, radii, shadows } from '../theme';
 
 export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, refreshKey = 0, user }) {
@@ -25,6 +25,7 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, ref
   const selectedMethod = useMemo(
     () =>
       methods.find((method) => method.id === selectedMethodId) ??
+      methods.find((method) => method.selected === 'si') ??
       methods.find((method) => method.verified === 'si') ??
       methods[0],
     [methods, selectedMethodId]
@@ -38,7 +39,7 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, ref
         return currentId;
       }
 
-      return rows.find((method) => method.verified === 'si')?.id ?? rows[0]?.id ?? null;
+      return rows.find((method) => method.selected === 'si')?.id ?? rows.find((method) => method.verified === 'si')?.id ?? rows[0]?.id ?? null;
     });
   }
 
@@ -63,6 +64,19 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, ref
       await load();
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function selectMethod(paymentId) {
+    const current = methods.find((method) => method.id === paymentId);
+    if (!current || current.verified !== 'si' || current.id === selectedMethodId) return;
+
+    setSelectedMethodId(paymentId);
+    try {
+      const rows = await selectPaymentMethod(user.clienteId, paymentId);
+      setMethods(rows);
+    } catch {
+      await load();
     }
   }
 
@@ -136,7 +150,7 @@ export default function PaymentMethodsScreen({ onAdd, onBack, onUserUpdated, ref
                 key={method.id}
                 method={method}
                 onDelete={() => setMethodToDelete(method)}
-                onSelect={() => setSelectedMethodId(method.id)}
+                onSelect={() => selectMethod(method.id)}
                 selected={selectedMethod?.id === method.id}
               />
             ))}
@@ -173,6 +187,7 @@ function PaymentCard({ deleting, method, onDelete, onSelect, selected }) {
 
   return (
     <Pressable
+      disabled={pending}
       onPress={onSelect}
       style={[styles.paymentCard, pending && styles.paymentCardPending, selected && styles.paymentCardSelected]}
     >

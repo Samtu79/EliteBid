@@ -16,3 +16,9 @@ export async function deletePaymentMethod(clienteId, paymentId) {
     method: 'DELETE'
   });
 }
+
+export async function selectPaymentMethod(clienteId, paymentId) {
+  return apiRequest(`/users/${clienteId}/payments/${paymentId}/selected`, {
+    method: 'PUT'
+  });
+}

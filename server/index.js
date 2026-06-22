@@ -653,11 +653,12 @@ app.post('/api/usuarios/me/medios-de-pago', wrap(async (req, res) => {
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para agregar medios de pago.');
   const payment = sanitizePayment(fromLegacyPaymentInput(req.body));
   const verified = 'si';
-  await run(
+  const paymentResult = await run(
     `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [viewer.clienteId, payment.type, JSON.stringify(buildPaymentDetail(payment)), payment.currency, payment.amount, verified]
   );
+  await ensureSelectedPayment(viewer.clienteId, paymentResult.insertId);
   await refreshClientCategory(viewer.clienteId);
   res.status(201).json(await getUserPayments(viewer.clienteId));
 }));
@@ -1248,9 +1249,10 @@ app.put('/api/users/:clienteId/purchases/:bidId/delivery', wrap(async (req, res)
 app.get('/api/users/:clienteId/payments', wrap(async (req, res) => {
   const viewer = await requireMatchingClient(req, req.params.clienteId);
   if (await isGuest(viewer.clienteId)) return res.json([]);
+  await ensureSelectedPayment(viewer.clienteId);
   const rows = await query(
     `SELECT identificador AS id, tipo AS type, detalle AS detail, moneda AS currency,
-      monto_garantia AS amount, verificado AS verified
+      monto_garantia AS amount, verificado AS verified, seleccionado AS selected
      FROM medios_pago
      WHERE cliente = ?
      ORDER BY identificador DESC`,
@@ -1264,23 +1266,41 @@ app.post('/api/users/:clienteId/payments', wrap(async (req, res) => {
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para agregar medios de pago.');
   const payment = sanitizePayment(req.body);
   const verified = 'si';
-  await run(
+  const paymentResult = await run(
     `INSERT INTO medios_pago (cliente, tipo, detalle, moneda, monto_garantia, verificado)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [viewer.clienteId, payment.type, JSON.stringify(buildPaymentDetail(payment)), payment.currency, payment.amount, verified]
   );
+  await ensureSelectedPayment(viewer.clienteId, paymentResult.insertId);
   await refreshClientCategory(viewer.clienteId);
   const summary = await first('SELECT COUNT(*) AS paymentCount FROM medios_pago WHERE cliente = ?', [viewer.clienteId]);
   res.json(summary?.paymentCount ?? 0);
 }));
 
+app.put('/api/users/:clienteId/payments/:paymentId/selected', wrap(async (req, res) => {
+  const viewer = await requireMatchingClient(req, req.params.clienteId);
+  await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para elegir un medio de pago.');
+  const paymentId = parsePositiveInt(req.params.paymentId, 'Medio de pago invalido.');
+  const payment = await first(
+    "SELECT identificador AS id FROM medios_pago WHERE identificador = ? AND cliente = ? AND verificado = 'si' LIMIT 1",
+    [paymentId, viewer.clienteId]
+  );
+  if (!payment) throw new Error('Solo podes elegir un medio de pago verificado.');
+
+  await run("UPDATE medios_pago SET seleccionado = 'no' WHERE cliente = ?", [viewer.clienteId]);
+  await run("UPDATE medios_pago SET seleccionado = 'si' WHERE identificador = ? AND cliente = ?", [paymentId, viewer.clienteId]);
+  res.json(await getUserPayments(viewer.clienteId));
+}));
+
 app.delete('/api/users/:clienteId/payments/:paymentId', wrap(async (req, res) => {
   const viewer = await requireMatchingClient(req, req.params.clienteId);
   await assertNotGuest(viewer.clienteId, 'Verifica tu cuenta para eliminar medios de pago.');
+  const paymentId = parsePositiveInt(req.params.paymentId, 'Medio de pago invalido.');
   await run('DELETE FROM medios_pago WHERE identificador = ? AND cliente = ?', [
-    parsePositiveInt(req.params.paymentId, 'Medio de pago invalido.'),
+    paymentId,
     viewer.clienteId
   ]);
+  await ensureSelectedPayment(viewer.clienteId);
   await refreshClientCategory(viewer.clienteId);
   const summary = await first('SELECT COUNT(*) AS paymentCount FROM medios_pago WHERE cliente = ?', [viewer.clienteId]);
   res.json(summary?.paymentCount ?? 0);
@@ -1911,19 +1931,17 @@ async function getAuctionPaymentLock(clienteId, auctionId) {
 }
 
 async function resolveBidPayment(clienteId, paymentMethodId, amount) {
-  const requestedId = paymentMethodId ? parsePositiveInt(paymentMethodId, 'Medio de pago invalido.') : null;
   const payment = await first(
     `SELECT identificador AS id, monto_garantia AS guaranteeAmount
      FROM medios_pago
      WHERE cliente = ? AND verificado = 'si'
-       ${requestedId ? 'AND identificador = ?' : ''}
-     ORDER BY identificador ASC
+     ORDER BY seleccionado = 'si' DESC, identificador ASC
      LIMIT 1`,
-    requestedId ? [clienteId, requestedId] : [clienteId]
+    [clienteId]
   );
 
   if (!payment) {
-    throw new Error(requestedId ? 'Selecciona un medio de pago verificado.' : 'Necesitas un medio de pago verificado para pujar.');
+    throw new Error('Necesitas un medio de pago verificado para pujar.');
   }
 
   const guaranteeAmount = Number(payment.guaranteeAmount || 0);
@@ -2212,15 +2230,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
     throw new Error(`Para categorias comun, especial y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
   }
 
-  const lockedPaymentMethodId = await getAuctionPaymentLock(clienteId, auctionId);
-  if (
-    lockedPaymentMethodId &&
-    paymentMethodId &&
-    Number(parsePositiveInt(paymentMethodId, 'Medio de pago invalido.')) !== Number(lockedPaymentMethodId)
-  ) {
-    throw new Error('Ya ingresaste a esta subasta con otro medio de pago. Debes seguir pujando con el mismo.');
-  }
-  const resolvedPaymentId = await resolveBidPayment(clienteId, lockedPaymentMethodId || paymentMethodId, amount);
+  const resolvedPaymentId = await resolveBidPayment(clienteId, null, amount);
   const assistantId = await ensureAssistant(clienteId, auctionId);
   await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', detail.itemId]);
   const result = await run('INSERT INTO pujos (asistente, item, medio_pago, importe, ganador) VALUES (?, ?, ?, ?, ?)', [
@@ -2434,15 +2444,39 @@ async function getFavoriteAuctions(clienteId) {
 }
 
 async function getUserPayments(clienteId) {
+  await ensureSelectedPayment(clienteId);
   const rows = await query(
     `SELECT identificador AS id, tipo AS type, detalle AS detail, moneda AS currency,
-      monto_garantia AS amount, verificado AS verified
+      monto_garantia AS amount, verificado AS verified, seleccionado AS selected
      FROM medios_pago
      WHERE cliente = ?
      ORDER BY identificador DESC`,
     [clienteId]
   );
   return rows.map((row) => ({ ...row, parsedDetail: parseDetail(row.detail) }));
+}
+
+async function ensureSelectedPayment(clienteId, preferredPaymentId = null) {
+  const selected = await first(
+    "SELECT identificador AS id FROM medios_pago WHERE cliente = ? AND verificado = 'si' AND seleccionado = 'si' LIMIT 1",
+    [clienteId]
+  );
+  if (selected) return selected.id;
+
+  const fallback = preferredPaymentId
+    ? await first(
+      "SELECT identificador AS id FROM medios_pago WHERE identificador = ? AND cliente = ? AND verificado = 'si' LIMIT 1",
+      [preferredPaymentId, clienteId]
+    )
+    : await first(
+      "SELECT identificador AS id FROM medios_pago WHERE cliente = ? AND verificado = 'si' ORDER BY identificador ASC LIMIT 1",
+      [clienteId]
+    );
+  if (!fallback) return null;
+
+  await run("UPDATE medios_pago SET seleccionado = 'no' WHERE cliente = ?", [clienteId]);
+  await run("UPDATE medios_pago SET seleccionado = 'si' WHERE identificador = ? AND cliente = ?", [fallback.id, clienteId]);
+  return fallback.id;
 }
 
 async function getUserNotifications(viewer) {

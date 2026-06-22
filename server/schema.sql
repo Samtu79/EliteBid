@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS medios_pago (
   moneda ENUM('ARS', 'USD') DEFAULT 'ARS',
   monto_garantia DECIMAL(14,2) DEFAULT 0,
   verificado ENUM('si', 'no') DEFAULT 'no',
+  seleccionado ENUM('si', 'no') DEFAULT 'no',
   CONSTRAINT fk_medios_pago_cliente FOREIGN KEY (cliente) REFERENCES clientes (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

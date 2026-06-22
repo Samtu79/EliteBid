@@ -166,6 +166,11 @@ async function migrateSecuritySchema() {
   );
   await run("ALTER TABLE subastas MODIFY moneda ENUM('ARS', 'USD') DEFAULT 'ARS'");
   await run("ALTER TABLE medios_pago MODIFY moneda ENUM('ARS', 'USD') DEFAULT 'ARS'");
+  await addColumnIfMissing(
+    'medios_pago',
+    'seleccionado',
+    "ALTER TABLE medios_pago ADD COLUMN seleccionado ENUM('si', 'no') DEFAULT 'no' AFTER verificado"
+  );
   await run("ALTER TABLE penalidades MODIFY estado ENUM('activa', 'pagada', 'vencida') DEFAULT 'activa'");
   await run('ALTER TABLE penalidades MODIFY vencimiento DATE');
   await run(
