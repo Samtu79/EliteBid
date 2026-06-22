@@ -142,13 +142,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
         </Pressable>
         <Text style={styles.logo}>Detalle</Text>
-        {publicGuest ? (
-          <View style={styles.iconButton} />
-        ) : (
-          <Pressable onPress={onOpenNotifications} style={styles.iconButton}>
-            <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={24} />
-          </Pressable>
-        )}
+        <View style={styles.iconButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>

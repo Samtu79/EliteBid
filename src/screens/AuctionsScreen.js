@@ -148,7 +148,8 @@ export default function AuctionsScreen({ onBack, onNavigate, onOpenAuctionDetail
 
 function AuctionRow({ auction, isFavorite, onPress, onToggleFavorite }) {
   const live = auction.status === 'abierta';
-  const price = live ? auction.currentBid : auction.basePrice;
+  const hasBid = Number(auction.currentBid || 0) > 0;
+  const price = live ? (hasBid ? auction.currentBid : auction.basePrice) : auction.basePrice;
 
   return (
     <Pressable onPress={onPress} style={styles.auctionRow}>
@@ -169,7 +170,7 @@ function AuctionRow({ auction, isFavorite, onPress, onToggleFavorite }) {
           {auction.location}
         </Text>
         <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>{price == null ? 'Precio' : live ? 'Puja actual' : 'Precio base'}</Text>
+          <Text style={styles.priceLabel}>{price == null ? 'Precio' : live ? (hasBid ? 'Puja actual' : 'Valor inicial') : 'Precio base'}</Text>
           <Text style={styles.price}>
             {price == null ? 'Reservado' : formatMoney(price)}
           </Text>

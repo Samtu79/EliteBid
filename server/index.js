@@ -11,10 +11,10 @@ require('dotenv').config();
 
 const app = express();
 const SESSION_DAYS = 7;
-const BID_TIMER_SECONDS = 20;
-const FIRST_BID_TIMER_SECONDS = 60;
+const BID_TIMER_SECONDS = 60;
+const FIRST_BID_TIMER_SECONDS = 180;
 const DEMO_LIVE_AUCTION_IDS = [11, 12, 13];
-const DEMO_FIRST_BID_TIMER_SECONDS = 120;
+const DEMO_FIRST_BID_TIMER_SECONDS = 180;
 const COMPANY_CLIENT_ID = 4;
 const SHIPPING_COST = 25000;
 const MAX_GUARANTEE_AMOUNT = 999999999999.99;
@@ -1721,7 +1721,7 @@ async function getAuctionRows(viewer = null) {
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
       s.ubicacion AS location, COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl,
       p.descripcion_catalogo AS description, i.precio_base AS basePrice,
-      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
+      i.puja_actual AS currentBid,
       i.cierre_estado AS closureStatus,
       GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), i.timer_vencimiento)) AS timerSecondsRemaining
      FROM subastas s
@@ -1757,7 +1757,7 @@ async function getAuctionDetail(auctionId, clienteId) {
       (SELECT GROUP_CONCAT(f.uri ORDER BY f.orden SEPARATOR '\n') FROM fotos f WHERE f.producto = p.identificador) AS photoUrls,
       p.descripcion_catalogo AS itemTitle, p.descripcion_completa AS fullDescription, p.identificador AS productId,
       i.identificador AS itemId, i.precio_base AS basePrice, i.comision AS commission,
-      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid, i.subastado AS sold,
+      i.puja_actual AS currentBid, i.subastado AS sold,
       i.orden_lote AS lotPosition,
       (SELECT COUNT(*) FROM items_catalogo lot_items WHERE lot_items.catalogo = c.identificador) AS lotItemCount,
       i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt,
@@ -1814,7 +1814,7 @@ async function getAuctionCatalogLots(auctionId, viewer = null) {
       p.identificador AS productId, p.imagen_uri AS imageUrl,
       (SELECT GROUP_CONCAT(f.uri ORDER BY f.orden SEPARATOR '\n') FROM fotos f WHERE f.producto = p.identificador) AS photoUrls,
       i.identificador AS itemId, i.precio_base AS basePrice,
-      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
+      i.puja_actual AS currentBid,
       i.orden_lote AS lotPosition, i.comision AS commission, i.subastado AS sold, i.cierre_estado AS closureStatus,
       i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt
      FROM subastas s

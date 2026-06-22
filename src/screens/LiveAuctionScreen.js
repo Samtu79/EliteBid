@@ -37,6 +37,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const [winnerCelebration, setWinnerCelebration] = useState(null);
   const amountRef = useRef('');
   const userEditedAmountRef = useRef(false);
+  const activeItemIdRef = useRef(null);
   const leadingItemIdRef = useRef(null);
   const celebratedWinIdsRef = useRef(new Set());
   const pollingRef = useRef(false);
@@ -194,7 +195,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
 
       applyAuctionDetail(result.auction, { forceSuggestedBid: true });
-      setMessage('Puja confirmada. El contador volvio a 20 segundos.');
+      setMessage('Puja confirmada. El contador volvio a 1 minuto.');
       setToast({ message: 'Puja registrada. Vas liderando este lote.', tone: 'success' });
       await load();
     } catch (bidError) {
@@ -222,6 +223,10 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   }
 
   function applyAuctionDetail(detail, { forceSuggestedBid = false } = {}) {
+    const nextItemId = Number(detail?.itemId || 0);
+    const itemChanged = activeItemIdRef.current != null && activeItemIdRef.current !== nextItemId;
+    activeItemIdRef.current = nextItemId;
+
     setAuction(detail);
     setSecondsRemaining(Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0));
     if (detail?.lockedPaymentMethodId) {
@@ -252,7 +257,12 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       });
     }
 
-    syncAmountWithAuction(detail, forceSuggestedBid);
+    if (itemChanged) {
+      setError('');
+      setMessage('');
+      userEditedAmountRef.current = false;
+    }
+    syncAmountWithAuction(detail, forceSuggestedBid || itemChanged);
   }
 
   function syncAmountWithAuction(detail, forceSuggestedBid = false) {
@@ -318,9 +328,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             </Text>
           </View>
         </View>
-        <Pressable onPress={() => guardRoomExit(onOpenNotifications)} style={styles.iconButton}>
-          <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={24} />
-        </Pressable>
+        <View style={styles.iconButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -331,15 +339,6 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             locations={[0, 0.48, 1]}
             style={StyleSheet.absoluteFill}
           />
-
-          <View style={styles.floatingFeed}>
-            {auction.bidFeed?.slice(0, 3).map((bid) => (
-              <View key={bid.id} style={styles.feedChip}>
-                <Text style={styles.feedChipAlias}>{bid.bidderAlias}</Text>
-                <Text style={styles.feedChipAmount}>{formatMoney(bid.amount)}</Text>
-              </View>
-            ))}
-          </View>
 
           <View style={styles.stageCopy}>
             <Text style={styles.stageMeta}>
@@ -355,7 +354,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         </View>
 
         <View style={styles.bidSurface}>
-          <Text style={styles.panelLabel}>Puja actual</Text>
+          <Text style={styles.panelLabel}>{Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Valor inicial'}</Text>
           <Text style={styles.currentBid}>{formatMoney(rules.currentBid)}</Text>
           <View style={[styles.timerBox, finalized && styles.timerBoxClosed]}>
             <MaterialCommunityIcons
