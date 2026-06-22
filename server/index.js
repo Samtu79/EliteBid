@@ -1713,6 +1713,9 @@ async function getUserBids(clienteId, filters = {}) {
 async function getAuctionRows(viewer = null) {
   await settleExpiredAuctionTimers();
   const restrictedCatalog = !viewer || viewer.rol === 'invitado';
+  const auctionVisibilityClause = restrictedCatalog
+    ? "WHERE s.estado = 'programada' AND s.fecha >= CURRENT_DATE()"
+    : "WHERE s.estado <> 'programada' OR s.fecha >= CURRENT_DATE()";
   const rows = await query(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
@@ -1734,7 +1737,7 @@ async function getAuctionRows(viewer = null) {
      ) catalogo_actual ON catalogo_actual.catalogo = c.identificador
      JOIN items_catalogo i ON i.catalogo = c.identificador AND i.orden_lote = catalogo_actual.orden_actual
      JOIN productos p ON p.identificador = i.producto
-     ${restrictedCatalog ? "WHERE s.estado = 'programada'" : ''}
+     ${auctionVisibilityClause}
      ORDER BY CASE s.estado WHEN 'abierta' THEN 0 WHEN 'programada' THEN 1 ELSE 2 END, s.fecha ASC`
   );
 
@@ -1768,6 +1771,7 @@ async function getAuctionDetail(auctionId, clienteId) {
      JOIN items_catalogo i ON i.catalogo = c.identificador
      JOIN productos p ON p.identificador = i.producto
      WHERE s.identificador = ?
+       AND (s.estado <> 'programada' OR s.fecha >= CURRENT_DATE())
      ORDER BY CASE WHEN i.cierre_estado = 'finalizada' THEN 1 ELSE 0 END,
        CASE WHEN i.cierre_estado = 'finalizada' THEN -i.orden_lote ELSE i.orden_lote END ASC
      LIMIT 1`,
@@ -2554,7 +2558,7 @@ async function getUserNotifications(viewer) {
   const upcoming = await first(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date, s.categoria AS category
      FROM subastas s
-     WHERE s.estado = 'programada'
+     WHERE s.estado = 'programada' AND s.fecha >= CURRENT_DATE()
      ORDER BY s.fecha ASC, s.hora ASC
      LIMIT 1`
   );

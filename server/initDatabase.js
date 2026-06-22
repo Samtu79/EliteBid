@@ -231,6 +231,11 @@ async function addColumnIfMissing(tableName, columnName, ddl) {
 }
 
 async function seedDatabase() {
+  const dateInDays = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
   await run(
     `INSERT IGNORE INTO paises (numero, nombre, nombre_corto, capital, nacionalidad, idiomas)
      VALUES
@@ -418,7 +423,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 3,
     title: 'Porsche 911 Carrera 1973',
-    date: '2026-07-09',
+    date: dateInDays(7),
     time: '20:30',
     status: 'programada',
     category: 'oro',
@@ -487,7 +492,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 7,
     title: 'Coleccion Inicial de Diseno Argentino',
-    date: '2026-07-12',
+    date: dateInDays(10),
     time: '19:30',
     status: 'programada',
     category: 'comun',
@@ -512,7 +517,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 8,
     title: 'Coleccion de Arte Contemporaneo Federal',
-    date: '2026-07-18',
+    date: dateInDays(16),
     time: '18:45',
     status: 'programada',
     category: 'plata',
@@ -537,7 +542,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 9,
     title: 'Joyeria Antigua y Relojeria de Autor',
-    date: '2026-08-03',
+    date: dateInDays(32),
     time: '20:15',
     status: 'programada',
     category: 'oro',
@@ -562,7 +567,7 @@ async function seedDatabase() {
   await seedAuction({
     id: 10,
     title: 'Objetos Historicos del Siglo XIX',
-    date: '2026-08-21',
+    date: dateInDays(50),
     time: '19:00',
     status: 'programada',
     category: 'comun',
