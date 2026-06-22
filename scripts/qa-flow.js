@@ -1145,7 +1145,10 @@ async function main() {
     const activeGold = goldAuctions.find((auction) => Number(auction.id) === Number(goldAuctionSeed.auctionId));
     if (!activeGold || activeGold.status !== 'abierta') throw new Error('No se pudo preparar subasta oro abierta para QA');
     const goldDetail = await request(`/auctions/${activeGold.id}`, { token: userGold.sessionToken });
-    const goldHighAmount = Number(goldDetail.currentBid) + Math.ceil(Number(goldDetail.basePrice) * 0.25);
+    const goldCurrentAmount = Number(goldDetail.currentBid || 0) > 0
+      ? Number(goldDetail.currentBid)
+      : Number(goldDetail.basePrice || 0);
+    const goldHighAmount = goldCurrentAmount + Math.ceil(Number(goldDetail.basePrice) * 0.25);
     const goldBid = await request(`/auctions/${activeGold.id}/bids`, {
       method: 'POST',
       token: userGold.sessionToken,
@@ -1376,6 +1379,16 @@ async function main() {
     if (!Array.isArray(pdfFavorites) || !pdfFavorites.some((auction) => Number(auction.id) === Number(activeCommon.id))) {
       throw new Error('/usuarios/me/favoritos no guardo favorito');
     }
+    const favoriteNotifications = await request('/notificaciones', { token: userA.sessionToken });
+    const savedFavoriteNotification = favoriteNotifications.find((notification) => notification.id === `favorite-saved-${activeCommon.id}`);
+    if (!savedFavoriteNotification || savedFavoriteNotification.target !== `auction:${activeCommon.id}`) {
+      throw new Error('Guardar favorito no genero notificacion accionable');
+    }
+    const liveFavoriteNotification = favoriteNotifications.find((notification) => notification.id === `favorite-live-${activeCommon.id}`);
+    if (!liveFavoriteNotification || liveFavoriteNotification.action !== 'open_auction') {
+      throw new Error('La subasta favorita en vivo no genero aviso de inicio');
+    }
+    logOk('favoritos generan notificaciones de guardado e inicio');
     await request(`/usuarios/me/favoritos/${room.itemId}`, { method: 'DELETE', token: userA.sessionToken });
     logOk('pdf favoritos compatible');
 
@@ -1489,7 +1502,7 @@ async function main() {
     logOk('usuario A vuelve a superar la oferta');
 
     await db.query(
-      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 SECOND) WHERE identificador = ?",
+      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND) WHERE identificador = ?",
       [room.itemId]
     );
     const closedDetail = await request(`/auctions/${activeCommon.id}?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
@@ -1501,6 +1514,12 @@ async function main() {
     if (!wonPurchase || wonPurchase.paymentStatus !== 'pagada') {
       throw new Error('La puja ganadora no quedo pagada automaticamente');
     }
+    const winNotifications = await request('/notificaciones', { token: userA.sessionToken });
+    const wonNotification = winNotifications.find((notification) => notification.id === `purchase-won-${comebackBid.bid.id}`);
+    if (!wonNotification || wonNotification.action !== 'open_won_bids' || wonNotification.target !== 'wonBids') {
+      throw new Error('Ganar producto no genero notificacion accionable');
+    }
+    logOk('producto ganado genera notificacion');
     const afterPaymentRows = await request(`/users/${userA.clienteId}/payments`, { token: userA.sessionToken });
     const afterLockedPayment = afterPaymentRows.find((payment) => Number(payment.id) === lockedPaymentId);
     const expectedDebit = Number(wonPurchase.totalDue || 0);
@@ -1577,7 +1596,7 @@ async function main() {
       body: JSON.stringify({ clienteId: userPenalty.clienteId, amount: penaltyBidAmount })
     });
     await db.query(
-      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 SECOND) WHERE identificador = ?",
+      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND) WHERE identificador = ?",
       [penaltyAuctionSeed.itemId]
     );
     await request(`/auctions/${penaltyAuctionSeed.auctionId}?clienteId=${userPenalty.clienteId}`, { token: userPenalty.sessionToken });
@@ -1592,6 +1611,22 @@ async function main() {
     if (!fundsPenalty || Number(fundsPenalty.amount) !== Math.round(penaltyBidAmount * 0.1 * 100) / 100) {
       throw new Error('La multa por falta de fondos no quedo activa con el 10 porciento');
     }
+    await db.query(
+      `UPDATE registro_de_subasta r
+       JOIN pujos p ON p.identificador = ?
+       JOIN asistentes a ON a.identificador = p.asistente
+       JOIN items_catalogo i ON i.identificador = p.item
+       JOIN catalogos c ON c.identificador = i.catalogo
+       SET r.creado_en = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 71 HOUR)
+       WHERE r.cliente = a.cliente AND r.subasta = c.subasta AND r.producto = i.producto`,
+      [penaltyBid.bid.id]
+    );
+    const expiringNotifications = await request('/notificaciones', { token: userPenalty.sessionToken });
+    const expiringNotification = expiringNotifications.find((notification) => notification.id === `purchase-expiring-${penaltyBid.bid.id}`);
+    if (!expiringNotification || expiringNotification.action !== 'open_won_bids') {
+      throw new Error('Producto ganado por vencer no genero notificacion accionable');
+    }
+    logOk('producto ganado por vencer genera notificacion');
     const restrictedAccount = await request('/usuarios/me/estado-cuenta', { token: userPenalty.sessionToken });
     if (restrictedAccount.estado !== 'restringida') throw new Error('La cuenta con penalidad no quedo restringida');
     await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [activeCommon.id]);

@@ -1742,7 +1742,7 @@ async function getAuctionRows(viewer = null) {
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
       s.ubicacion AS location, COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl,
       p.descripcion_catalogo AS description, i.precio_base AS basePrice,
-      i.puja_actual AS currentBid,
+      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
       i.cierre_estado AS closureStatus,
       GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), i.timer_vencimiento)) AS timerSecondsRemaining
      FROM subastas s
@@ -1778,7 +1778,7 @@ async function getAuctionDetail(auctionId, clienteId) {
       (SELECT GROUP_CONCAT(f.uri ORDER BY f.orden SEPARATOR '\n') FROM fotos f WHERE f.producto = p.identificador) AS photoUrls,
       p.descripcion_catalogo AS itemTitle, p.descripcion_completa AS fullDescription, p.identificador AS productId,
       i.identificador AS itemId, i.precio_base AS basePrice, i.comision AS commission,
-      i.puja_actual AS currentBid, i.subastado AS sold,
+      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid, i.subastado AS sold,
       i.orden_lote AS lotPosition,
       (SELECT COUNT(*) FROM items_catalogo lot_items WHERE lot_items.catalogo = c.identificador) AS lotItemCount,
       i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt,
@@ -1835,7 +1835,7 @@ async function getAuctionCatalogLots(auctionId, viewer = null) {
       p.identificador AS productId, p.imagen_uri AS imageUrl,
       (SELECT GROUP_CONCAT(f.uri ORDER BY f.orden SEPARATOR '\n') FROM fotos f WHERE f.producto = p.identificador) AS photoUrls,
       i.identificador AS itemId, i.precio_base AS basePrice,
-      i.puja_actual AS currentBid,
+      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
       i.orden_lote AS lotPosition, i.comision AS commission, i.subastado AS sold, i.cierre_estado AS closureStatus,
       i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt
      FROM subastas s
@@ -1931,14 +1931,22 @@ async function getAuctionPaymentLock(clienteId, auctionId) {
 }
 
 async function resolveBidPayment(clienteId, paymentMethodId, amount) {
-  const payment = await first(
-    `SELECT identificador AS id, monto_garantia AS guaranteeAmount
-     FROM medios_pago
-     WHERE cliente = ? AND verificado = 'si'
-     ORDER BY seleccionado = 'si' DESC, identificador ASC
-     LIMIT 1`,
-    [clienteId]
-  );
+  const payment = paymentMethodId
+    ? await first(
+      `SELECT identificador AS id, monto_garantia AS guaranteeAmount
+       FROM medios_pago
+       WHERE identificador = ? AND cliente = ? AND verificado = 'si'
+       LIMIT 1`,
+      [parsePositiveInt(paymentMethodId, 'Medio de pago invalido.'), clienteId]
+    )
+    : await first(
+      `SELECT identificador AS id, monto_garantia AS guaranteeAmount
+       FROM medios_pago
+       WHERE cliente = ? AND verificado = 'si'
+       ORDER BY seleccionado = 'si' DESC, identificador ASC
+       LIMIT 1`,
+      [clienteId]
+    );
 
   if (!payment) {
     throw new Error('Necesitas un medio de pago verificado para pujar.');
@@ -2230,7 +2238,12 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
     throw new Error(`Para categorias comun, especial y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
   }
 
-  const resolvedPaymentId = await resolveBidPayment(clienteId, null, amount);
+  const lockedPaymentId = await getAuctionPaymentLock(clienteId, auctionId);
+  if (lockedPaymentId && paymentMethodId && Number(paymentMethodId) !== Number(lockedPaymentId)) {
+    throw new Error('Debes usar el mismo medio de pago elegido al ingresar a esta subasta.');
+  }
+
+  const resolvedPaymentId = lockedPaymentId || await resolveBidPayment(clienteId, paymentMethodId, amount);
   const assistantId = await ensureAssistant(clienteId, auctionId);
   await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', detail.itemId]);
   const result = await run('INSERT INTO pujos (asistente, item, medio_pago, importe, ganador) VALUES (?, ?, ?, ?, ?)', [
@@ -2420,7 +2433,8 @@ async function getFavoriteAuctions(clienteId) {
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
       s.ubicacion AS location, COALESCE(p.imagen_uri, s.imagen_uri) AS imageUrl,
-      p.descripcion_catalogo AS description, i.precio_base AS basePrice, i.puja_actual AS currentBid,
+      p.descripcion_catalogo AS description, i.precio_base AS basePrice,
+      CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
       f.creado_en AS favoritedAt
      FROM favoritos f
      JOIN subastas s ON s.identificador = f.subasta
@@ -2480,6 +2494,7 @@ async function ensureSelectedPayment(clienteId, preferredPaymentId = null) {
 }
 
 async function getUserNotifications(viewer) {
+  await settleExpiredAuctionTimers();
   const notifications = [];
   const guest = viewer.rol === 'invitado';
 
@@ -2539,31 +2554,115 @@ async function getUserNotifications(viewer) {
       });
     }
 
-    const pendingPurchase = await first(
-      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission, s.titulo AS title
+    const latestFavorite = await first(
+      `SELECT s.identificador AS auctionId, s.titulo AS title, s.estado AS status,
+        DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date, s.hora AS time, f.creado_en AS createdAt
+       FROM favoritos f
+       JOIN subastas s ON s.identificador = f.subasta
+       WHERE f.cliente = ? AND s.estado <> 'cerrada'
+       ORDER BY f.creado_en DESC
+       LIMIT 1`,
+      [viewer.clienteId]
+    );
+
+    if (latestFavorite) {
+      notifications.push({
+        id: `favorite-saved-${latestFavorite.auctionId}`,
+        action: 'open_auction',
+        createdAt: latestFavorite.createdAt ?? new Date().toISOString(),
+        description: `${latestFavorite.title} quedo guardada en tus favoritos. Te avisamos cuando la sala este disponible.`,
+        priority: latestFavorite.status === 'abierta' ? 'alta' : 'media',
+        read: false,
+        target: `auction:${latestFavorite.auctionId}`,
+        title: 'Favorito guardado'
+      });
+    }
+
+    const favoriteLive = await first(
+      `SELECT s.identificador AS auctionId, s.titulo AS title, s.hora AS time,
+        f.creado_en AS createdAt
+       FROM favoritos f
+       JOIN subastas s ON s.identificador = f.subasta
+       WHERE f.cliente = ? AND s.estado = 'abierta'
+       ORDER BY s.fecha ASC, s.hora ASC, f.creado_en DESC
+       LIMIT 1`,
+      [viewer.clienteId]
+    );
+
+    if (favoriteLive) {
+      notifications.push({
+        id: `favorite-live-${favoriteLive.auctionId}`,
+        action: 'open_auction',
+        createdAt: new Date().toISOString(),
+        description: `${favoriteLive.title} ya esta en vivo. Entra a la sala para seguir los lotes favoritos.`,
+        priority: 'alta',
+        read: false,
+        target: `auction:${favoriteLive.auctionId}`,
+        title: 'Empezo una subasta favorita'
+      });
+    }
+
+    const latestWonPurchase = await first(
+      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission,
+        s.identificador AS auctionId, s.titulo AS title, r.estado_pago AS paymentStatus,
+        r.creado_en AS createdAt
        FROM pujos p
        JOIN asistentes a ON a.identificador = p.asistente
        JOIN items_catalogo i ON i.identificador = p.item
        JOIN catalogos c ON c.identificador = i.catalogo
        JOIN subastas s ON s.identificador = c.subasta
        JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = i.producto
-       WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada' AND r.estado_pago = 'pendiente'
-       ORDER BY p.identificador DESC
+       WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada'
+       ORDER BY r.creado_en DESC, p.identificador DESC
        LIMIT 1`,
       [viewer.clienteId]
     );
 
-    if (pendingPurchase) {
-      const totalDue = Number(pendingPurchase.amount || 0) + Number(pendingPurchase.commission || 0) + SHIPPING_COST;
+    if (latestWonPurchase) {
+      const totalDue = Number(latestWonPurchase.amount || 0) + Number(latestWonPurchase.commission || 0) + SHIPPING_COST;
       notifications.push({
-        id: `purchase-due-${pendingPurchase.bidId}`,
+        id: `purchase-won-${latestWonPurchase.bidId}`,
         action: 'open_won_bids',
-        createdAt: new Date().toISOString(),
-        description: `${pendingPurchase.title}: puja ${formatMoney(pendingPurchase.amount)}, comision ${formatMoney(pendingPurchase.commission)} y envio ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(totalDue)}.`,
+        createdAt: latestWonPurchase.createdAt ?? new Date().toISOString(),
+        description: `${latestWonPurchase.title}: ganaste por ${formatMoney(latestWonPurchase.amount)}. Total con comision y envio: ${formatMoney(totalDue)}.`,
         priority: 'alta',
         read: false,
         target: 'wonBids',
-        title: 'Subasta adjudicada'
+        title: latestWonPurchase.paymentStatus === 'pagada' ? 'Ganaste un producto' : 'Producto ganado pendiente de pago'
+      });
+    }
+
+    const expiringPurchase = await first(
+      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission,
+        s.titulo AS title, r.creado_en AS createdAt,
+        DATE_ADD(r.creado_en, INTERVAL 72 HOUR) AS dueAt,
+        GREATEST(0, TIMESTAMPDIFF(HOUR, UTC_TIMESTAMP(), DATE_ADD(r.creado_en, INTERVAL 72 HOUR))) AS hoursRemaining
+       FROM pujos p
+       JOIN asistentes a ON a.identificador = p.asistente
+       JOIN items_catalogo i ON i.identificador = p.item
+       JOIN catalogos c ON c.identificador = i.catalogo
+       JOIN subastas s ON s.identificador = c.subasta
+       JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = i.producto
+       WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada'
+         AND r.estado_pago IN ('pendiente', 'multa')
+         AND DATE_ADD(r.creado_en, INTERVAL 72 HOUR) > UTC_TIMESTAMP()
+         AND DATE_ADD(r.creado_en, INTERVAL 72 HOUR) <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR)
+       ORDER BY DATE_ADD(r.creado_en, INTERVAL 72 HOUR) ASC
+       LIMIT 1`,
+      [viewer.clienteId]
+    );
+
+    if (expiringPurchase) {
+      const totalDue = Number(expiringPurchase.amount || 0) + Number(expiringPurchase.commission || 0) + SHIPPING_COST;
+      notifications.push({
+        id: `purchase-expiring-${expiringPurchase.bidId}`,
+        action: 'open_won_bids',
+        createdAt: new Date().toISOString(),
+        description: `${expiringPurchase.title} vence en ${expiringPurchase.hoursRemaining} h. Regulariza ${formatMoney(totalDue)} para evitar penalidades.`,
+        priority: 'alta',
+        read: false,
+        target: 'wonBids',
+        title: 'Producto ganado por vencer'
       });
     }
 
