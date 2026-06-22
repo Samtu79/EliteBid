@@ -20,6 +20,7 @@ import { colors, radii } from '../theme';
 
 export default function WonBidsScreen({ onBack, onNavigate, user }) {
   const [addresses, setAddresses] = useState({});
+  const [activeView, setActiveView] = useState('pending');
   const [loading, setLoading] = useState(true);
   const [purchases, setPurchases] = useState([]);
   const [payingId, setPayingId] = useState(null);
@@ -111,24 +112,8 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
 
   const completedPurchases = purchases.filter(isCompletedPurchase);
   const pendingPurchases = purchases.filter((purchase) => !isCompletedPurchase(purchase));
-  const purchaseGroups = [
-    {
-      id: 'pending',
-      title: 'Ganados con datos pendientes',
-      description: 'Completá el pago o la dirección de entrega para que podamos preparar el producto.',
-      empty: 'No tenés productos ganados con datos pendientes.',
-      mode: 'pending',
-      purchases: pendingPurchases
-    },
-    {
-      id: 'completed',
-      title: 'Ganados en seguimiento',
-      description: 'Productos con pago y dirección completos. Acá podés consultar el estado.',
-      empty: 'Todavía no tenés productos ganados con todos los datos completos.',
-      mode: 'completed',
-      purchases: completedPurchases
-    }
-  ];
+  const showingPending = activeView === 'pending';
+  const visiblePurchases = showingPending ? pendingPurchases : completedPurchases;
 
   return (
     <View style={styles.container}>
@@ -158,7 +143,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
           <View style={styles.header}>
             <Text style={styles.title}>Mis productos ganados</Text>
             <Text style={styles.subtitle}>
-              Separá lo que requiere una acción tuya de lo que ya está en seguimiento.
+              Elegí si querés completar pendientes o consultar el estado de tus productos.
             </Text>
           </View>
 
@@ -169,36 +154,44 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
               <Text style={styles.emptyCopy}>Cuando ganes una pieza, va a aparecer acá con su pago y estado de entrega.</Text>
             </View>
           ) : (
-            <View style={styles.groups}>
-              {purchaseGroups.map((group) => (
-                <View key={group.id} style={styles.purchaseSection}>
-                  <Text style={styles.purchaseSectionTitle}>{group.title} ({group.purchases.length})</Text>
-                  <Text style={styles.purchaseSectionCopy}>{group.description}</Text>
-                  {group.purchases.length ? (
-                    <View style={styles.list}>
-                      {group.purchases.map((purchase) => (
-                        <PurchaseCard
-                          address={addresses[purchase.id] || ''}
-                          completed={group.mode === 'completed'}
-                          key={purchase.id}
-                          onConfirmPayment={confirmPayment}
-                          onSaveAddress={saveAddress}
-                          onUpdateAddress={updateAddress}
-                          paying={payingId === purchase.id}
-                          purchase={purchase}
-                          saving={savingId === purchase.id}
-                        />
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.inlineEmpty}>
-                      <MaterialCommunityIcons color={colors.onSurfaceVariant} name="check-circle-outline" size={20} />
-                      <Text style={styles.inlineEmptyText}>{group.empty}</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
+            <>
+              <View style={styles.switcher}>
+                <ModeButton active={showingPending} count={pendingPurchases.length} icon="file-document-edit-outline" label="Completar" onPress={() => setActiveView('pending')} />
+                <ModeButton active={!showingPending} count={completedPurchases.length} icon="truck-check-outline" label="Estado" onPress={() => setActiveView('completed')} />
+              </View>
+              <View style={styles.purchaseSection}>
+                <Text style={styles.purchaseSectionTitle}>{showingPending ? 'Completá tus datos' : 'Estado de tus productos'}</Text>
+                <Text style={styles.purchaseSectionCopy}>
+                  {showingPending
+                    ? 'Finalizá el pago o cargá la dirección de entrega para preparar cada producto.'
+                    : 'Consultá el seguimiento de los productos con pago y entrega confirmados.'}
+                </Text>
+                {visiblePurchases.length ? (
+                  <View style={styles.list}>
+                    {visiblePurchases.map((purchase) => (
+                      <PurchaseCard
+                        address={addresses[purchase.id] || ''}
+                        completed={!showingPending}
+                        key={purchase.id}
+                        onConfirmPayment={confirmPayment}
+                        onSaveAddress={saveAddress}
+                        onUpdateAddress={updateAddress}
+                        paying={payingId === purchase.id}
+                        purchase={purchase}
+                        saving={savingId === purchase.id}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.inlineEmpty}>
+                    <MaterialCommunityIcons color={colors.onSurfaceVariant} name="check-circle-outline" size={20} />
+                    <Text style={styles.inlineEmptyText}>
+                      {showingPending ? 'No tenés productos ganados con datos pendientes.' : 'Todavía no tenés productos ganados en seguimiento.'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
           )}
         </ScrollView>
       )}
@@ -212,6 +205,16 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
         visible={Boolean(toast)}
       />
     </View>
+  );
+}
+
+function ModeButton({ active, count, icon, label, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
+      <MaterialCommunityIcons color={active ? colors.onPrimaryFixed : colors.onSurfaceVariant} name={icon} size={18} />
+      <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
+      <Text style={[styles.modeCount, active && styles.modeCountActive]}>{count}</Text>
+    </Pressable>
   );
 }
 
@@ -526,6 +529,38 @@ const styles = StyleSheet.create({
   list: {
     gap: 16
   },
+  modeButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(147, 143, 156, 0.28)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    height: 44,
+    justifyContent: 'center'
+  },
+  modeButtonActive: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryContainer
+  },
+  modeCount: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  modeCountActive: {
+    color: colors.onPrimaryFixed
+  },
+  modeText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modeTextActive: {
+    color: colors.onPrimaryFixed
+  },
   loading: {
     alignItems: 'center',
     flex: 1,
@@ -628,6 +663,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
     marginTop: 8
+  },
+  switcher: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20
   },
   title: {
     color: colors.onSurface,

@@ -19,6 +19,7 @@ import {
 } from '../backend/auctionService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
+import NotificationBell from '../components/NotificationBell';
 import { colors, radii, shadows } from '../theme';
 
 const categoryLabel = {
@@ -35,7 +36,8 @@ export default function HomeScreen({
   onNavigate,
   onOpenAuctionDetail,
   onOpenAuctions,
-  onOpenNotifications
+  onOpenNotifications,
+  unreadNotificationCount = 0
 }) {
   const [liveAuctions, setLiveAuctions] = useState([]);
   const [upcomingAuctions, setUpcomingAuctions] = useState([]);
@@ -121,9 +123,7 @@ export default function HomeScreen({
           <View style={styles.headerSpacer} />
           <Text style={styles.logo}>Elite Bid</Text>
           <View style={styles.headerActions}>
-            <Pressable onPress={onOpenNotifications} style={styles.iconButton}>
-              <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={22} />
-            </Pressable>
+            <NotificationBell onPress={onOpenNotifications} unreadCount={unreadNotificationCount} />
           </View>
         </View>
 

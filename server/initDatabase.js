@@ -449,7 +449,9 @@ async function seedDatabase() {
     }
   }
 
-  await resetAuctionSeedData();
+  if (process.env.RESET_DEMO_DATA === 'true') {
+    await resetAuctionSeedData();
+  }
   const now = new Date();
   const schedule = (minutesFromNow) => {
     const startsAt = addMinutes(now, minutesFromNow);
@@ -822,12 +824,7 @@ async function seedDatabase() {
 async function seedAuction(auction) {
   await run(
     `INSERT IGNORE INTO subastas (identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidad_asistentes, tiene_deposito, seguridad_propia, categoria, moneda, imagen_uri)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE titulo = VALUES(titulo), fecha = VALUES(fecha), hora = VALUES(hora),
-       estado = VALUES(estado), subastador = VALUES(subastador), ubicacion = VALUES(ubicacion),
-       capacidad_asistentes = VALUES(capacidad_asistentes), tiene_deposito = VALUES(tiene_deposito),
-       seguridad_propia = VALUES(seguridad_propia), categoria = VALUES(categoria),
-       moneda = VALUES(moneda), imagen_uri = VALUES(imagen_uri)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       auction.id,
       auction.title,
@@ -846,26 +843,18 @@ async function seedAuction(auction) {
   );
   await run(
     `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE fecha = VALUES(fecha), disponible = VALUES(disponible),
-       descripcion_catalogo = VALUES(descripcion_catalogo), descripcion_completa = VALUES(descripcion_completa),
-       revisor = VALUES(revisor), duenio = VALUES(duenio), seguro = VALUES(seguro), imagen_uri = VALUES(imagen_uri)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [auction.id, auction.date, 'si', auction.product, auction.product, 2, 3, null, auction.image]
   );
   await seedProductPhotos(auction.id, auction.image);
   await run(
     `INSERT IGNORE INTO catalogos (identificador, descripcion, subasta, responsable)
-     VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), subasta = VALUES(subasta),
-       responsable = VALUES(responsable)`,
+     VALUES (?, ?, ?, ?)`,
     [auction.id, `Catalogo ${auction.title}`, auction.id, 2]
   );
   await run(
     `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE catalogo = VALUES(catalogo), orden_lote = VALUES(orden_lote),
-       producto = VALUES(producto), precio_base = VALUES(precio_base), comision = VALUES(comision),
-       subastado = VALUES(subastado), puja_actual = VALUES(puja_actual)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.12, 'no', auction.currentBid || 0]
   );
 
@@ -889,34 +878,17 @@ async function seedAuction(auction) {
     const itemId = auction.id * 100 + index + 1;
     await run(
       `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE fecha = VALUES(fecha), disponible = VALUES(disponible),
-         descripcion_catalogo = VALUES(descripcion_catalogo), descripcion_completa = VALUES(descripcion_completa),
-         revisor = VALUES(revisor), duenio = VALUES(duenio), seguro = VALUES(seguro), imagen_uri = VALUES(imagen_uri)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [productId, auction.date, 'si', item.product, item.product, 2, 3, null, item.image || auction.image]
     );
     await seedProductPhotos(productId, item.image || auction.image);
     await run(
       `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE catalogo = VALUES(catalogo), orden_lote = VALUES(orden_lote),
-         producto = VALUES(producto), precio_base = VALUES(precio_base), comision = VALUES(comision),
-         subastado = VALUES(subastado), puja_actual = VALUES(puja_actual)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, auction.id, index + 2, productId, item.basePrice, item.basePrice * 0.12, 'no', item.currentBid || 0]
     );
   }
 
-  if (auction.status === 'abierta') {
-    await run(
-      `UPDATE items_catalogo
-       SET timer_inicio = UTC_TIMESTAMP(),
-         timer_vencimiento = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE),
-         cierre_estado = 'esperando_puja',
-         cierre_motivo = NULL
-       WHERE catalogo = ? AND orden_lote = 1`,
-      [auction.durationMinutes || 60, auction.id]
-    );
-  }
 }
 
 async function seedProductPhotos(productId, uri) {

@@ -23,7 +23,7 @@ const actionLabel = {
   verify_account: 'Verificar'
 };
 
-export default function NotificationsScreen({ onAction, onBack }) {
+export default function NotificationsScreen({ onAction, onBack, onUnreadCountChange }) {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState(null);
@@ -31,7 +31,9 @@ export default function NotificationsScreen({ onAction, onBack }) {
   async function load() {
     setLoading(true);
     try {
-      setNotifications(await getNotifications());
+      const rows = await getNotifications();
+      setNotifications(rows);
+      onUnreadCountChange?.(rows.filter((item) => !item.read).length);
     } catch (error) {
       setToast({ message: error.message, tone: 'danger' });
     } finally {
@@ -47,6 +49,7 @@ export default function NotificationsScreen({ onAction, onBack }) {
     try {
       const result = await performNotificationAction(notification.id);
       onAction?.(result);
+      await load();
     } catch (error) {
       setToast({ message: error.message, tone: 'danger' });
     }

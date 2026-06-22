@@ -18,6 +18,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { getUserSummary } from '../backend/auctionService';
 import { getUserProfile, updateProfilePhoto, updateUserProfile } from '../backend/profileService';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
+import NotificationBell from '../components/NotificationBell';
 import VerificationPanel from '../components/VerificationPanel';
 import { colors, radii, shadows } from '../theme';
 
@@ -31,6 +32,7 @@ export default function ProfileScreen({
   onOpenPenalties,
   onSignOut,
   onUserUpdated,
+  unreadNotificationCount = 0,
   user
 }) {
   const [profile, setProfile] = useState(null);
@@ -186,9 +188,7 @@ export default function ProfileScreen({
           <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
         </Pressable>
         <Text style={styles.logo}>Elite Bid</Text>
-        <Pressable onPress={onOpenNotifications} style={styles.iconButton}>
-          <MaterialCommunityIcons color={colors.primary} name="bell-outline" size={24} />
-        </Pressable>
+        <NotificationBell onPress={onOpenNotifications} unreadCount={unreadNotificationCount} />
       </View>
       <CategoryModal
         loading={categoryLoading}

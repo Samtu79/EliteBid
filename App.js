@@ -3,6 +3,7 @@ import { Animated, Easing, Image, Platform, StatusBar, StyleSheet, Text, View } 
 
 import { initDatabase } from './src/backend/database';
 import { getActiveSession, signOut } from './src/backend/authService';
+import { getNotifications } from './src/backend/notificationService';
 import { getInitialNetworkStatus, subscribeConnectionStatus } from './src/backend/networkStatus';
 import { notifyOfflineConnection } from './src/backend/offlineNotificationService';
 import ConfirmDialog from './src/components/ConfirmDialog';
@@ -51,6 +52,7 @@ export default function App() {
   const [guestAccessDialogVisible, setGuestAccessDialogVisible] = useState(false);
   const [guestAccessTarget, setGuestAccessTarget] = useState('esta seccion');
   const [online, setOnline] = useState(getInitialNetworkStatus);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [connectionDialogVisible, setConnectionDialogVisible] = useState(false);
   const previousOnlineRef = useRef(true);
   const previousNetworkTypeRef = useRef(null);
@@ -106,6 +108,30 @@ export default function App() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!user?.clienteId || user.guestMode) {
+      setUnreadNotificationCount(0);
+      return undefined;
+    }
+
+    let mounted = true;
+    const refreshUnreadCount = async () => {
+      try {
+        const rows = await getNotifications();
+        if (mounted) setUnreadNotificationCount(rows.filter((item) => !item.read).length);
+      } catch {
+        // La campana conserva el ultimo estado ante una falla de red transitoria.
+      }
+    };
+    refreshUnreadCount();
+    const interval = setInterval(refreshUnreadCount, 30000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [user?.clienteId, user?.guestMode]);
 
   useEffect(() => {
     if (!booting) {
@@ -304,6 +330,7 @@ export default function App() {
             onOpenAuctions={() => setAppView('auctions')}
             onOpenNotifications={() => openNotifications('home')}
             onSignOut={user?.guestMode ? handleSignOut : undefined}
+            unreadNotificationCount={unreadNotificationCount}
             user={user}
           />
         )
@@ -356,6 +383,7 @@ export default function App() {
             setAppView('wonBids');
           }}
           onSignOut={handleSignOut}
+          unreadNotificationCount={unreadNotificationCount}
           onUserUpdated={setUser}
           user={user}
         />
@@ -367,6 +395,7 @@ export default function App() {
         <NotificationsScreen
           onAction={handleNotificationAction}
           onBack={() => setAppView(notificationsBackView)}
+          onUnreadCountChange={setUnreadNotificationCount}
         />
       ) : user && appView === 'auctions' ? (
         <AuctionsScreen
@@ -407,10 +436,11 @@ export default function App() {
           onNavigate={navigateTab}
           onCreateAccount={user?.guestMode ? registerFromGuest : undefined}
           onOpenAuctionDetail={openAuctionDetail}
-          onOpenAuctions={() => setAppView('auctions')}
-          onOpenNotifications={() => openNotifications('home')}
-          onSignOut={user?.guestMode ? handleSignOut : undefined}
-          user={user}
+            onOpenAuctions={() => setAppView('auctions')}
+            onOpenNotifications={() => openNotifications('home')}
+            onSignOut={user?.guestMode ? handleSignOut : undefined}
+            unreadNotificationCount={unreadNotificationCount}
+            user={user}
         />
       ) : authView === 'register' ? (
         <RegisterScreen
