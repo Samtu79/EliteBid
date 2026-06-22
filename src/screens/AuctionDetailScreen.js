@@ -6,6 +6,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { enterAuctionRoom, getAuctionDetail, toggleFavoriteAuction } from '../backend/auctionService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
+import ProductPhotoCarousel from '../components/ProductPhotoCarousel';
 import { colors, radii, shadows } from '../theme';
 
 const categoryLabel = {
@@ -193,13 +194,19 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
             </View>
             {(auction.catalog || []).map((item, index) => (
               <View key={item.itemId || item.productId || index} style={styles.catalogItem}>
-                <Image source={{ uri: item.photoUrls?.[0] || item.imageUrl || auction.imageUrl }} style={styles.catalogImage} />
                 <View style={styles.catalogCopy}>
                   <Text style={styles.catalogItemTitle}>Pieza {index + 1}</Text>
                   <Text numberOfLines={2} style={styles.catalogDescription}>{item.description}</Text>
                   <Text style={styles.catalogPrice}>
                     {item.basePrice == null ? 'Precio reservado para usuarios registrados' : `Base ${formatMoney(item.basePrice)}`}
                   </Text>
+                  <ProductPhotoCarousel
+                    fallbackUri={item.imageUrl || auction.imageUrl}
+                    height={116}
+                    photos={item.photoUrls}
+                    title={`${item.photoUrls?.length || 1} foto${(item.photoUrls?.length || 1) === 1 ? '' : 's'} del producto`}
+                    variant="compact"
+                  />
                 </View>
               </View>
             ))}
@@ -350,17 +357,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 2
   },
-  catalogImage: {
-    backgroundColor: colors.surfaceHighest,
-    borderRadius: radii.sm,
-    height: 54,
-    width: 54
-  },
   catalogItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 64
+    backgroundColor: 'rgba(20, 5, 43, 0.32)',
+    borderColor: 'rgba(204, 193, 255, 0.12)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: 10
   },
   catalogItemTitle: {
     color: colors.onSurface,

@@ -17,6 +17,7 @@ import { getAuctionDetail, placeBid } from '../backend/auctionService';
 import { getPaymentMethods } from '../backend/paymentService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
+import ProductPhotoCarousel from '../components/ProductPhotoCarousel';
 import { colors, radii } from '../theme';
 
 const SHIPPING_COST = 25000;
@@ -349,6 +350,19 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               {auction.description}
             </Text>
           </View>
+        </View>
+
+        <View style={styles.productPhotosPanel}>
+          <View style={styles.productPhotosHeader}>
+            <MaterialCommunityIcons color={colors.primary} name="image-multiple-outline" size={18} />
+            <Text style={styles.productPhotosTitle}>Fotos del lote actual</Text>
+          </View>
+          <ProductPhotoCarousel
+            fallbackUri={auction.imageUrl}
+            height={150}
+            photos={auction.photoUrls}
+            title="Deslizá para revisar detalles sin salir de la sala"
+          />
         </View>
 
         <View style={styles.bidSurface}>
@@ -934,6 +948,26 @@ const styles = StyleSheet.create({
   },
   paymentPanel: {
     marginTop: 12
+  },
+  productPhotosHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8
+  },
+  productPhotosPanel: {
+    backgroundColor: 'rgba(38, 24, 62, 0.88)',
+    borderColor: 'rgba(204, 193, 255, 0.14)',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    marginHorizontal: 4,
+    marginTop: 10,
+    padding: 12
+  },
+  productPhotosTitle: {
+    color: colors.onSurface,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase'
   },
   rangeRow: {
     flexDirection: 'row',
