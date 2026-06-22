@@ -725,6 +725,78 @@ async function seedDatabase() {
           basePrice: 250000
         }
       ]
+    },
+    {
+      id: 9,
+      title: 'Tecnologia retro y videojuegos clasicos',
+      ...schedule(320),
+      status: 'programada',
+      category: 'especial',
+      currency: 'ARS',
+      location: 'Centro Cultural Abasto',
+      image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=900&q=80',
+      product: 'Consola familiar japonesa de primera generacion con caja original.',
+      basePrice: 520000,
+      extraItems: [
+        {
+          product: 'Lote de cartuchos clasicos con manuales conservados.',
+          image: 'https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=900&q=80',
+          basePrice: 260000
+        },
+        {
+          product: 'Computadora personal retro restaurada y funcional.',
+          image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+          basePrice: 430000
+        }
+      ]
+    },
+    {
+      id: 10,
+      title: 'Bodega privada: vinos de guarda',
+      ...schedule(350),
+      status: 'programada',
+      category: 'plata',
+      currency: 'ARS',
+      location: 'Cava Mendoza, Palermo',
+      image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=900&q=80',
+      product: 'Caja vertical de Malbec de alta gama, cosechas seleccionadas.',
+      basePrice: 730000,
+      extraItems: [
+        {
+          product: 'Estuche de Cabernet Sauvignon reserva con guarda certificada.',
+          image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?auto=format&fit=crop&w=900&q=80',
+          basePrice: 410000
+        },
+        {
+          product: 'Decantador de cristal y accesorios de sommelier.',
+          image: 'https://images.unsplash.com/photo-1568213816046-0ee1c42bd559?auto=format&fit=crop&w=900&q=80',
+          basePrice: 190000
+        }
+      ]
+    },
+    {
+      id: 14,
+      title: 'Diseño industrial y luminarias italianas',
+      ...schedule(390),
+      status: 'programada',
+      category: 'oro',
+      currency: 'USD',
+      location: 'Showroom Distrito Arenales',
+      image: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=900&q=80',
+      product: 'Lampara italiana de pie cromada, decada del setenta.',
+      basePrice: 6800,
+      extraItems: [
+        {
+          product: 'Par de apliques murales de diseño modernista.',
+          image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
+          basePrice: 2400
+        },
+        {
+          product: 'Silla de autor con estructura tubular y cuero original.',
+          image: 'https://images.unsplash.com/photo-1549497538-303791108f95?auto=format&fit=crop&w=900&q=80',
+          basePrice: 3100
+        }
+      ]
     }
   ];
 
