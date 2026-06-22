@@ -48,8 +48,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const leadingActive = Boolean(
     auction?.closure?.winner?.isCurrentUser &&
       auction?.closureStatus === 'en_cuenta' &&
-      auction?.status !== 'cerrada' &&
-      Number(secondsRemaining || 0) > 0
+      auction?.status !== 'cerrada'
   );
 
   async function load() {
@@ -199,6 +198,9 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       if (leadingActive) {
         throw new Error('Ya vas primero. No podes salir de la sala hasta que te superen o cierre el contador.');
       }
+      if (auction?.timerExpiresAt && secondsRemaining <= 0 && ['esperando_puja', 'en_cuenta'].includes(auction?.closureStatus)) {
+        throw new Error('El contador llego a 00:00. Estamos cerrando la pieza, espera el siguiente producto del lote.');
+      }
 
       const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
 
@@ -311,7 +313,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const counting = auction.closureStatus === 'en_cuenta' && !finalized;
   const waitingForFirstBid = auction.closureStatus === 'esperando_puja' && !finalized && secondsRemaining > 0;
   const technicalClosing = !finalized && secondsRemaining === 0 && (counting || auction.closureStatus === 'esperando_puja');
-  const bidDisabled = sending || finalized || !selectedPaymentId || leadingActive;
+  const bidDisabled = sending || finalized || technicalClosing || !selectedPaymentId || leadingActive;
 
   return (
     <View style={styles.container}>
@@ -430,6 +432,12 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               <Text style={styles.roomPillText}>{finalized ? 'Cerrada' : 'Sala abierta'}</Text>
             </View>
           </View>
+          {auction.currency === 'USD' ? (
+            <View style={styles.currencyNotice}>
+              <MaterialCommunityIcons color={colors.primary} name="currency-usd" size={17} />
+              <Text style={styles.currencyNoticeText}>Subasta en dolares: requiere medio de pago USD verificado.</Text>
+            </View>
+          ) : null}
 
           {finalized ? (
             <View style={styles.resultBox}>
@@ -439,13 +447,13 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           ) : null}
 
           <View style={styles.stepper}>
-            <Pressable disabled={sending || finalized || leadingActive} onPress={() => adjustBid(-1)} style={styles.stepButton}>
+            <Pressable disabled={sending || finalized || technicalClosing || leadingActive} onPress={() => adjustBid(-1)} style={styles.stepButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="minus" size={24} />
             </Pressable>
             <View style={styles.amountBox}>
               <Text style={styles.amountLabel}>Tu puja</Text>
               <TextInput
-                editable={!finalized && !sending && !leadingActive}
+                editable={!finalized && !technicalClosing && !sending && !leadingActive}
                 keyboardType="numeric"
                 onChangeText={(value) => {
                   amountRef.current = value;
@@ -461,7 +469,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                 value={amount}
               />
             </View>
-            <Pressable disabled={sending || finalized || leadingActive} onPress={() => adjustBid(1)} style={styles.stepButton}>
+            <Pressable disabled={sending || finalized || technicalClosing || leadingActive} onPress={() => adjustBid(1)} style={styles.stepButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="plus" size={24} />
             </Pressable>
           </View>
@@ -487,7 +495,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               <ActivityIndicator color={colors.onPrimaryFixed} />
             ) : (
               <Text numberOfLines={1} style={styles.bidButtonText}>
-                {leadingActive ? 'Esperando que te superen' : bidButtonLabel}
+                {technicalClosing ? 'Cerrando pieza' : leadingActive ? 'Esperando que te superen' : bidButtonLabel}
               </Text>
             )}
           </Pressable>
@@ -753,6 +761,26 @@ const styles = StyleSheet.create({
     lineHeight: 41,
     marginTop: 4,
     textAlign: 'center'
+  },
+  currencyNotice: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(208, 188, 255, 0.1)',
+    borderColor: 'rgba(208, 188, 255, 0.22)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  currencyNoticeText: {
+    color: colors.onSurfaceVariant,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17
   },
   emptyFeed: {
     alignItems: 'center',

@@ -220,7 +220,7 @@ app.post('/api/auth/register-guest', wrap(async (req, res) => {
     toMysqlDateTime(new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000))
   ]);
 
-  const emailResult = queueVerificationForUser({
+  const emailResult = queueWelcomeAndVerificationForUser({
     email: form.email,
     name: form.firstName,
     token: verificationCode
@@ -229,6 +229,7 @@ app.post('/api/auth/register-guest', wrap(async (req, res) => {
   res.json({
     ...toSessionUser(user, token),
     accountReviewPending: true,
+    accountReviewEmailSent: emailResult.sent,
     verificationPending: true,
     verificationEmailSent: emailResult.sent
   });
@@ -278,7 +279,7 @@ app.post(['/api/auth/register/paso1', '/api/auth/registro/fase1'], wrap(async (r
   );
 
   const user = await first('SELECT id FROM usuarios WHERE lower(email) = ? LIMIT 1', [form.email]);
-  const emailResult = queueVerificationForUser({
+  const emailResult = queueWelcomeAndVerificationForUser({
     email: form.email,
     name: form.firstName,
     token: verificationCode
@@ -288,6 +289,7 @@ app.post(['/api/auth/register/paso1', '/api/auth/registro/fase1'], wrap(async (r
     email: form.email,
     estado: 'pendiente',
     accountReviewPending: true,
+    accountReviewEmailSent: emailResult.sent,
     registrationId: String(user.id),
     verificationEmailSent: emailResult.sent
   });
@@ -992,6 +994,21 @@ app.get('/api/mis-bienes/:productId/seguro', wrap(async (req, res) => {
   });
 }));
 
+app.post('/api/mis-bienes/:productId/seguro/aumento', wrap(async (req, res) => {
+  const viewer = await requireAuthenticatedClient(req);
+  const productId = parsePositiveInt(req.params.productId, 'Producto invalido.');
+  const lot = (await getUserLots(viewer.clienteId)).find((item) => Number(item.id) === productId);
+  if (!lot) throw new Error('No encontramos ese bien.');
+  if (!lot.insurancePolicy) throw new Error('El bien aun no tiene poliza vigente para solicitar aumento.');
+  res.json({
+    ok: true,
+    estado: 'solicitado',
+    mensaje: `Solicitud enviada a ${lot.insuranceCompany || 'la aseguradora'} para revisar aumento de poliza.`,
+    poliza: lot.insurancePolicy,
+    productoId: productId
+  });
+}));
+
 app.get('/api/mis-bienes/:productId/ubicacion', wrap(async (req, res) => {
   const viewer = await requireAuthenticatedClient(req);
   const productId = parsePositiveInt(req.params.productId, 'Producto invalido.');
@@ -1367,7 +1384,7 @@ async function settlePurchase(clienteId, bidId) {
     `SELECT p.identificador AS id, p.importe AS amount, s.identificador AS auctionId,
       prod.identificador AS productId, prod.duenio AS ownerId, i.identificador AS itemId,
       i.comision AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
-      r.estado_pago AS paymentStatus
+      r.estado_pago AS paymentStatus, s.moneda AS currency
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
      JOIN items_catalogo i ON i.identificador = p.item
@@ -1387,7 +1404,7 @@ async function settlePurchase(clienteId, bidId) {
   const totalDue = Number(purchase.amount || 0) + Number(purchase.commission || 0) + SHIPPING_COST;
   const payment = purchase.paymentMethodId
     ? await first(
-      `SELECT monto_garantia AS guaranteeAmount
+      `SELECT monto_garantia AS guaranteeAmount, moneda AS currency
        FROM medios_pago
        WHERE identificador = ? AND cliente = ?
        LIMIT 1`,
@@ -1396,12 +1413,16 @@ async function settlePurchase(clienteId, bidId) {
     : null;
   const availableFunds = Number(payment?.guaranteeAmount || 0);
 
+  if (payment && payment.currency !== purchase.currency) {
+    throw new Error(`Esta subasta es en ${purchase.currency}. Debes pagar con un medio verificado en ${purchase.currency}.`);
+  }
+
   if (!payment || availableFunds < totalDue) {
     await registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds);
     throw new Error(`Fondos insuficientes para confirmar el pago. Se genero una multa del 10% de la oferta (${formatMoney(Number(purchase.amount || 0) * 0.1)}). Debes pagarla y presentar los fondos dentro de las 72 horas.`);
   }
 
-  const captured = await captureWinningPayment(clienteId, purchase.paymentMethodId, totalDue);
+  const captured = await captureWinningPayment(clienteId, purchase.paymentMethodId, totalDue, purchase.currency);
   if (!captured) {
     await registerInsufficientFundsPenalty(clienteId, purchase, totalDue, availableFunds);
     throw new Error('No pudimos debitar el total de tu medio de pago. Se genero una multa y debes presentar fondos.');
@@ -1421,13 +1442,14 @@ async function settlePurchase(clienteId, bidId) {
   return { paid: true, totalDue };
 }
 
-async function captureWinningPayment(clienteId, paymentMethodId, totalDue) {
+async function captureWinningPayment(clienteId, paymentMethodId, totalDue, currency = null) {
   if (!paymentMethodId || totalDue <= 0) return false;
+  const currencyFilter = currency ? 'AND moneda = ?' : '';
   const result = await run(
     `UPDATE medios_pago
      SET monto_garantia = monto_garantia - ?
-     WHERE identificador = ? AND cliente = ? AND verificado = 'si' AND monto_garantia >= ?`,
-    [totalDue, paymentMethodId, clienteId, totalDue]
+     WHERE identificador = ? AND cliente = ? AND verificado = 'si' ${currencyFilter} AND monto_garantia >= ?`,
+    currency ? [totalDue, paymentMethodId, clienteId, currency, totalDue] : [totalDue, paymentMethodId, clienteId, totalDue]
   );
   return Number(result.affectedRows || 0) === 1;
 }
@@ -1735,8 +1757,18 @@ async function getAuctionRows(viewer = null) {
   await settleExpiredAuctionTimers();
   const restrictedCatalog = !viewer || viewer.rol === 'invitado';
   const auctionVisibilityClause = restrictedCatalog
-    ? "WHERE s.estado = 'programada' AND s.fecha >= CURRENT_DATE()"
-    : "WHERE s.estado <> 'cerrada' AND (s.estado <> 'programada' OR s.fecha >= CURRENT_DATE())";
+    ? `WHERE s.estado = 'programada' AND s.fecha >= CURRENT_DATE()
+       AND EXISTS (
+         SELECT 1 FROM catalogos c2
+         JOIN items_catalogo i2 ON i2.catalogo = c2.identificador
+         WHERE c2.subasta = s.identificador AND i2.cierre_estado <> 'finalizada'
+       )`
+    : `WHERE s.estado <> 'cerrada' AND (s.estado <> 'programada' OR s.fecha >= CURRENT_DATE())
+       AND EXISTS (
+         SELECT 1 FROM catalogos c2
+         JOIN items_catalogo i2 ON i2.catalogo = c2.identificador
+         WHERE c2.subasta = s.identificador AND i2.cierre_estado <> 'finalizada'
+       )`;
   const rows = await query(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
@@ -1806,8 +1838,8 @@ async function getAuctionDetail(auctionId, clienteId) {
   const payment = restrictedCatalog
     ? { verifiedPayments: 0 }
     : await first(
-      `SELECT COUNT(*) AS verifiedPayments FROM medios_pago WHERE cliente = ? AND verificado = 'si'`,
-      [clienteId]
+      `SELECT COUNT(*) AS verifiedPayments FROM medios_pago WHERE cliente = ? AND verificado = 'si' AND moneda = ?`,
+      [clienteId, auction.currency || 'ARS']
     );
 
   const detail = {
@@ -1857,7 +1889,7 @@ async function enterAuctionRoom(clienteId, auctionId) {
   await assertNoActivePenalties(clienteId);
   if (!detail.eligibility.categoryOk) throw new Error('Tu categoria no permite participar en esta subasta.');
   if (detail.eligibility.verifiedPayments < 1) {
-    throw new Error('Necesitas registrar un medio de pago verificado para pujar.');
+    throw new Error(`Necesitas registrar un medio de pago verificado en ${detail.currency || 'ARS'} para pujar.`);
   }
   await ensureAssistant(clienteId, auctionId);
   return detail;
@@ -1930,26 +1962,30 @@ async function getAuctionPaymentLock(clienteId, auctionId) {
   return lock?.paymentMethodId ?? null;
 }
 
-async function resolveBidPayment(clienteId, paymentMethodId, amount) {
+async function resolveBidPayment(clienteId, paymentMethodId, amount, currency = 'ARS') {
   const payment = paymentMethodId
     ? await first(
-      `SELECT identificador AS id, monto_garantia AS guaranteeAmount
+      `SELECT identificador AS id, monto_garantia AS guaranteeAmount, moneda AS currency
        FROM medios_pago
        WHERE identificador = ? AND cliente = ? AND verificado = 'si'
        LIMIT 1`,
       [parsePositiveInt(paymentMethodId, 'Medio de pago invalido.'), clienteId]
     )
     : await first(
-      `SELECT identificador AS id, monto_garantia AS guaranteeAmount
+      `SELECT identificador AS id, monto_garantia AS guaranteeAmount, moneda AS currency
        FROM medios_pago
-       WHERE cliente = ? AND verificado = 'si'
+       WHERE cliente = ? AND verificado = 'si' AND moneda = ?
        ORDER BY seleccionado = 'si' DESC, identificador ASC
        LIMIT 1`,
-      [clienteId]
+      [clienteId, currency]
     );
 
   if (!payment) {
-    throw new Error('Necesitas un medio de pago verificado para pujar.');
+    throw new Error(`Necesitas un medio de pago verificado en ${currency} para pujar.`);
+  }
+
+  if (payment.currency !== currency) {
+    throw new Error(`Esta subasta es en ${currency}. Selecciona un medio de pago verificado en ${currency}.`);
   }
 
   const guaranteeAmount = Number(payment.guaranteeAmount || 0);
@@ -2045,7 +2081,6 @@ async function ensureOpenAuctionItems() {
 }
 
 async function settleExpiredAuctionTimers() {
-  await restoreClosedDemoAuctions();
   await ensureOpenAuctionItems();
   const rows = await query(
     `SELECT i.identificador AS itemId
@@ -2122,9 +2157,10 @@ async function finalizeAuctionItem(itemId) {
   const item = await first(
     `SELECT i.identificador AS itemId, i.precio_base AS basePrice, i.comision AS commission,
       i.cierre_estado AS closureStatus, c.subasta AS auctionId, p.identificador AS productId,
-      p.duenio AS ownerId
+      p.duenio AS ownerId, s.moneda AS currency
      FROM items_catalogo i
      JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
      JOIN productos p ON p.identificador = i.producto
      WHERE i.identificador = ?
      LIMIT 1`,
@@ -2149,7 +2185,7 @@ async function finalizeAuctionItem(itemId) {
   const reason = lastBid ? 'adjudicada_por_tiempo' : 'compra_empresa_sin_pujas';
   const totalDue = amount + Number(item.commission || 0) + SHIPPING_COST;
   const paidAutomatically = lastBid
-    ? await captureWinningPayment(buyerClientId, paymentMethodId, totalDue)
+    ? await captureWinningPayment(buyerClientId, paymentMethodId, totalDue, item.currency)
     : false;
   const paymentStatus = paidAutomatically ? 'pagada' : 'pendiente';
 
@@ -2222,6 +2258,13 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   if (detail.closureStatus === 'finalizada' || detail.status === 'cerrada') {
     throw new Error('Esta subasta ya finalizo.');
   }
+  const closingExpired = ['esperando_puja', 'en_cuenta'].includes(detail.closureStatus) &&
+    detail.timerExpiresAt &&
+    Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0) <= 0;
+  if (closingExpired) {
+    await finalizeAuctionItem(detail.itemId);
+    throw new Error('El contador llego a 00:00 y la pieza se esta adjudicando. Espera el siguiente producto del lote.');
+  }
   const activeLeadingBid = await getActiveLeadingBid(clienteId);
   if (activeLeadingBid) {
     throw new Error(`Ya vas primero en "${activeLeadingBid.title}". Podes mirar otras subastas, pero no ofertar hasta que te superen o cierre el contador.`);
@@ -2243,7 +2286,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
     throw new Error('Debes usar el mismo medio de pago elegido al ingresar a esta subasta.');
   }
 
-  const resolvedPaymentId = lockedPaymentId || await resolveBidPayment(clienteId, paymentMethodId, amount);
+  const resolvedPaymentId = lockedPaymentId || await resolveBidPayment(clienteId, paymentMethodId, amount, detail.currency || 'ARS');
   const assistantId = await ensureAssistant(clienteId, auctionId);
   await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', detail.itemId]);
   const result = await run('INSERT INTO pujos (asistente, item, medio_pago, importe, ganador) VALUES (?, ?, ?, ?, ?)', [
@@ -3341,6 +3384,32 @@ function queueVerificationForUser({ email, name, token }) {
     .catch((error) => {
       console.warn(`No se pudo enviar verificacion a ${email}: ${error.message}`);
     });
+
+  return { sent: configured, queued: true };
+}
+
+function queueWelcomeAndVerificationForUser({ email, name, token }) {
+  const configured = hasEmailProviderConfig();
+
+  void (async () => {
+    try {
+      const reviewResult = await sendAccountReviewEmail({ accepted: true, to: email, name });
+      if (!reviewResult?.sent) {
+        console.warn(`La bienvenida/validacion para ${email} quedo pendiente: ${reviewResult?.reason || 'proveedor no disponible'}.`);
+      }
+    } catch (error) {
+      console.warn(`No se pudo enviar bienvenida/validacion a ${email}: ${error.message}`);
+    }
+
+    try {
+      const verificationResult = await sendVerificationEmail({ to: email, name, token });
+      if (!verificationResult?.sent) {
+        console.warn(`El codigo de verificacion para ${email} quedo pendiente: ${verificationResult?.reason || 'proveedor no disponible'}.`);
+      }
+    } catch (error) {
+      console.warn(`No se pudo enviar verificacion a ${email}: ${error.message}`);
+    }
+  })();
 
   return { sent: configured, queued: true };
 }

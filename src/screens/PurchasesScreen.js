@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { getUserLots, submitUserLot } from '../backend/lotService';
+import { getUserLots, requestInsuranceUpgrade, submitUserLot } from '../backend/lotService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import ErrorDialog from '../components/ErrorDialog';
@@ -89,6 +89,15 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const [expandedItemIndex, setExpandedItemIndex] = useState(0);
+
+  async function requestPolicyUpgrade(lot) {
+    try {
+      const result = await requestInsuranceUpgrade(lot.id);
+      setToast({ message: result.mensaje || 'Solicitud de aumento de poliza enviada.', tone: 'success' });
+    } catch (error) {
+      setToast({ message: error.message, tone: 'danger' });
+    }
+  }
 
   async function loadLots() {
     setLoading(true);
@@ -354,7 +363,12 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
             updateItem={updateItem}
           />
         ) : (
-          <LotStatusList loading={loading} lots={lots} onRefresh={loadLots} />
+          <LotStatusList
+            loading={loading}
+            lots={lots}
+            onInsuranceUpgrade={requestPolicyUpgrade}
+            onRefresh={loadLots}
+          />
         )}
       </ScrollView>
 
@@ -544,7 +558,7 @@ function ProductForm({ canRemove, expanded, index, item, onPickPhoto, onRemove, 
   );
 }
 
-function LotStatusList({ loading, lots, onRefresh }) {
+function LotStatusList({ loading, lots, onInsuranceUpgrade, onRefresh }) {
   if (loading) {
     return <ActivityIndicator color={colors.primary} style={styles.loader} />;
   }
@@ -567,16 +581,17 @@ function LotStatusList({ loading, lots, onRefresh }) {
   return (
     <View style={styles.list}>
       {lots.map((lot) => (
-        <LotCard key={lot.id} lot={lot} />
+        <LotCard key={lot.id} lot={lot} onInsuranceUpgrade={onInsuranceUpgrade} />
       ))}
     </View>
   );
 }
 
-function LotCard({ lot }) {
+function LotCard({ lot, onInsuranceUpgrade }) {
   const status = statusCopy[lot.status] || statusCopy.pendiente;
   const items = lot.items || [];
   const photoUri = getDisplayPhotoUri(items[0]?.photoUris?.[0] || lot.photoUris?.[0]);
+  const canRequestInsuranceUpgrade = Boolean(lot.insurancePolicy) && ['a_confirmar', 'aceptado', 'en_subasta'].includes(lot.status);
 
   return (
     <View style={styles.lotCard}>
@@ -604,6 +619,21 @@ function LotCard({ lot }) {
         ) : null}
         <Text numberOfLines={3} style={styles.cardDescription}>{items[0]?.description || lot.description}</Text>
         <StatusDetail lot={lot} />
+        {lot.insurancePolicy ? (
+          <View style={styles.insuranceBox}>
+            <MaterialCommunityIcons color={colors.primary} name="shield-check" size={18} />
+            <View style={styles.insuranceCopy}>
+              <Text style={styles.insuranceTitle}>Poliza {lot.insurancePolicy}</Text>
+              <Text style={styles.insuranceText}>{lot.insuranceCompany || 'Aseguradora pendiente'}</Text>
+            </View>
+          </View>
+        ) : null}
+        {canRequestInsuranceUpgrade ? (
+          <Pressable onPress={() => onInsuranceUpgrade?.(lot)} style={styles.insuranceButton}>
+            <MaterialCommunityIcons color={colors.onPrimaryFixed} name="shield-plus-outline" size={16} />
+            <Text style={styles.insuranceButtonText}>Solicitar aumento de poliza</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -890,6 +920,49 @@ const styles = StyleSheet.create({
   },
   inputMultiline: {
     minHeight: 96
+  },
+  insuranceBox: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(168, 139, 250, 0.08)',
+    borderColor: 'rgba(168, 139, 250, 0.22)',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 10,
+    padding: 10
+  },
+  insuranceButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radii.full,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+    minHeight: 36,
+    paddingHorizontal: 13
+  },
+  insuranceButtonText: {
+    color: colors.onPrimaryFixed,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  insuranceCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  insuranceText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2
+  },
+  insuranceTitle: {
+    color: colors.onSurface,
+    fontSize: 12,
+    fontWeight: '900'
   },
   kindButton: {
     alignItems: 'center',

@@ -37,6 +37,12 @@ export async function submitUserLot(clienteId, payload) {
   return rows.some((lot) => lot.id === response.id) ? rows : [response, ...rows];
 }
 
+export async function requestInsuranceUpgrade(lotId) {
+  return apiRequest(`/mis-bienes/${lotId}/seguro/aumento`, {
+    method: 'POST'
+  });
+}
+
 function normalizeLots(rows) {
   return Array.isArray(rows) ? rows : [];
 }

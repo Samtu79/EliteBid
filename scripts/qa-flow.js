@@ -1112,7 +1112,7 @@ async function main() {
     });
     const [goldAuctionRows] = await db.query(
       `SELECT s.identificador AS auctionId, s.estado AS auctionStatus, i.identificador AS itemId,
-        i.puja_actual AS currentBid, i.subastado AS subastado
+        i.puja_actual AS currentBid, i.subastado AS subastado, s.moneda AS currency
        FROM subastas s
        JOIN catalogos c ON c.subasta = s.identificador
        JOIN items_catalogo i ON i.catalogo = c.identificador
@@ -1145,6 +1145,31 @@ async function main() {
     const activeGold = goldAuctions.find((auction) => Number(auction.id) === Number(goldAuctionSeed.auctionId));
     if (!activeGold || activeGold.status !== 'abierta') throw new Error('No se pudo preparar subasta oro abierta para QA');
     const goldDetail = await request(`/auctions/${activeGold.id}`, { token: userGold.sessionToken });
+    if (goldDetail.currency === 'USD') {
+      await expectReject('subasta USD rechaza medio de pago ARS', () =>
+        request(`/auctions/${activeGold.id}/bids`, {
+          method: 'POST',
+          token: userGold.sessionToken,
+          body: JSON.stringify({
+            clienteId: userGold.clienteId,
+            amount: Number(goldDetail.basePrice) + Math.ceil(Number(goldDetail.basePrice) * 0.02)
+          })
+        }), 'USD');
+      await request(`/users/${userGold.clienteId}/payments`, {
+        method: 'POST',
+        token: userGold.sessionToken,
+        body: JSON.stringify({
+          type: 'cuenta',
+          currency: 'USD',
+          amount: 100000000,
+          bank: 'Banco Dolar QA',
+          accountType: 'Cuenta internacional',
+          cbu: '1234567890123456789012',
+          alias: 'qa.oro.usd'
+        })
+      });
+      logOk('subasta USD exige medio de pago USD');
+    }
     const goldCurrentAmount = Number(goldDetail.currentBid || 0) > 0
       ? Number(goldDetail.currentBid)
       : Number(goldDetail.basePrice || 0);
@@ -1257,6 +1282,10 @@ async function main() {
     }
     const insurance = await request(`/mis-bienes/${createdLot.id}/seguro`, { token: userA.sessionToken });
     if (insurance.poliza !== 'POL-QA-001' || insurance.estado !== 'vigente') throw new Error('/mis-bienes/{id}/seguro no devolvio poliza vigente');
+    const insuranceUpgrade = await request(`/mis-bienes/${createdLot.id}/seguro/aumento`, { method: 'POST', token: userA.sessionToken });
+    if (!insuranceUpgrade.ok || insuranceUpgrade.estado !== 'solicitado') {
+      throw new Error('/mis-bienes/{id}/seguro/aumento no registro solicitud simulada');
+    }
     const location = await request(`/mis-bienes/${createdLot.id}/ubicacion`, { token: userA.sessionToken });
     if (location.ubicacion !== 'Deposito Qa Norte') throw new Error('/mis-bienes/{id}/ubicacion no devolvio deposito');
     await expectReject('lote publicado no se puede rechazar despues', () =>
@@ -1515,9 +1544,15 @@ async function main() {
     logOk('usuario A vuelve a superar la oferta');
 
     await db.query(
-      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND) WHERE identificador = ?",
+      "UPDATE items_catalogo SET timer_vencimiento = UTC_TIMESTAMP() WHERE identificador = ?",
       [room.itemId]
     );
+    await expectReject('lider no puede reabrir contador en 00:00', () =>
+      request(`/auctions/${activeCommon.id}/bids`, {
+        method: 'POST',
+        token: userA.sessionToken,
+        body: JSON.stringify({ clienteId: userA.clienteId, amount: comebackAmount + 10000 })
+      }), '00:00');
     const closedDetail = await request(`/auctions/${activeCommon.id}?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
     if (!closedDetail.recentWin || closedDetail.recentWin.paymentStatus !== 'pagada') {
       throw new Error('Al ganar no se informo la adjudicacion pagada para mostrar popup');

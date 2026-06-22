@@ -171,10 +171,13 @@ function buildVerificationContent({ name, code }) {
 
 function buildAccountReviewContent({ accepted, name }) {
   const firstName = escapeHtml(name || 'tu cuenta');
-  const title = accepted ? 'Cuenta aceptada por EliteBid' : 'Cuenta no aceptada por EliteBid';
+  const title = accepted ? 'Bienvenido a EliteBid' : 'Cuenta no aceptada por EliteBid';
   const message = accepted
-    ? 'La empresa valido tus datos iniciales. En otro mail vas a recibir un codigo para verificar tu correo y crear tu clave.'
+    ? 'Hemos validado tu usuario y tus datos iniciales. En unos segundos vas a recibir otro mail con el codigo para verificar tu correo y crear tu clave.'
     : 'La empresa no pudo aceptar tus datos iniciales. Si crees que es un error, comunicate con EliteBid.';
+  const nextStep = accepted
+    ? 'Ese codigo confirma que el email te pertenece. Si no lo ves, revisa spam o solicita el reenvio desde la app.'
+    : '';
 
   return {
     html: `
@@ -182,13 +185,15 @@ function buildAccountReviewContent({ accepted, name }) {
         <h1 style="font-size: 22px;">${title}</h1>
         <p>Hola ${firstName},</p>
         <p>${message}</p>
+        ${nextStep ? `<p>${nextStep}</p>` : ''}
       </div>
     `,
     text: [
       `Hola ${name || ''},`,
       title,
-      message
-    ].join('\n\n')
+      message,
+      nextStep
+    ].filter(Boolean).join('\n\n')
   };
 }
 

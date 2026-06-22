@@ -130,8 +130,12 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
   const live = auction.status === 'abierta';
   const guest = user.rol === 'invitado';
   const publicGuest = user?.guestMode || !user?.clienteId;
+  const catalogItems = auction.catalog || [];
+  const soldItems = catalogItems.filter((item) => item.sold === 'si' || item.closureStatus === 'finalizada');
+  const availableItems = catalogItems.length - soldItems.length;
+  const allItemsSold = catalogItems.length > 0 && availableItems <= 0;
   const canJoin =
-    !guest && live && auction.eligibility.categoryOk && auction.eligibility.verifiedPayments > 0 && !joining;
+    !guest && live && !allItemsSold && auction.eligibility.categoryOk && auction.eligibility.verifiedPayments > 0 && !joining;
 
   return (
     <View style={styles.container}>
@@ -192,7 +196,21 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
               <MaterialCommunityIcons color={colors.primary} name="format-list-bulleted" size={19} />
               <Text style={styles.catalogTitle}>Catalogo de productos</Text>
             </View>
-            {(auction.catalog || []).map((item, index) => (
+            {soldItems.length ? (
+              <View style={[styles.catalogNotice, allItemsSold && styles.catalogNoticeClosed]}>
+                <MaterialCommunityIcons
+                  color={allItemsSold ? '#73E6A2' : colors.secondary}
+                  name={allItemsSold ? 'check-decagram' : 'alert-circle-outline'}
+                  size={18}
+                />
+                <Text style={styles.catalogNoticeText}>
+                  {allItemsSold
+                    ? 'Todos los productos de este lote ya fueron ganados. La sala queda cerrada.'
+                    : `${soldItems.length} de ${catalogItems.length} producto${catalogItems.length === 1 ? '' : 's'} ya fueron ganados. En la sala se subasta el siguiente disponible.`}
+                </Text>
+              </View>
+            ) : null}
+            {catalogItems.map((item, index) => (
               <View key={item.itemId || item.productId || index} style={styles.catalogItem}>
                 <View style={styles.catalogCopy}>
                   <View style={styles.catalogItemHeader}>
@@ -231,6 +249,12 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           </View>
 
           <View style={styles.ruleCard}>
+            {auction.currency === 'USD' ? (
+              <RuleRow
+                ok={!publicGuest && auction.eligibility.verifiedPayments > 0}
+                text="Subasta en dolares: requiere medio de pago USD verificado."
+              />
+            ) : null}
             {guest ? (
               <RuleRow
                 ok={false}
@@ -251,13 +275,15 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
               ok={auction.eligibility.verifiedPayments > 0}
               text={
                 auction.eligibility.verifiedPayments > 0
-                  ? `${auction.eligibility.verifiedPayments} medio de pago verificado`
-                  : 'Necesitas un medio de pago verificado'
+                  ? `${auction.eligibility.verifiedPayments} medio de pago verificado en ${auction.currency || 'ARS'}`
+                  : `Necesitas un medio de pago verificado en ${auction.currency || 'ARS'}`
               }
             /> : null}
             {!guest ? <RuleRow
               ok={live}
-              text={live ? `Puja sugerida desde ${formatMoney(suggestedBid)}` : 'La sala abre en la fecha indicada'}
+              text={allItemsSold
+                ? 'Lote finalizado: no quedan productos disponibles para pujar.'
+                : live ? `Puja sugerida desde ${formatMoney(suggestedBid)}` : 'La sala abre en la fecha indicada'}
             /> : null}
           </View>
 
@@ -371,6 +397,27 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     padding: 10
+  },
+  catalogNotice: {
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(244, 197, 106, 0.1)',
+    borderColor: 'rgba(244, 197, 106, 0.24)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    padding: 10
+  },
+  catalogNoticeClosed: {
+    backgroundColor: 'rgba(115, 230, 162, 0.1)',
+    borderColor: 'rgba(115, 230, 162, 0.24)'
+  },
+  catalogNoticeText: {
+    color: colors.onSurface,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17
   },
   catalogItemTitle: {
     color: colors.onSurface,

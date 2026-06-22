@@ -188,7 +188,7 @@ function PersonalStep({ form, pickDocument, updateField }) {
       <View style={styles.verifiedBox}>
         <MaterialCommunityIcons color={colors.primaryContainer} name="email-fast-outline" size={26} />
         <Text style={styles.verifiedText}>
-          Te enviamos un codigo para confirmar que el mail te pertenece. La validacion de la cuenta llega despues en otro correo, aceptada o rechazada por la empresa.
+          Primero vas a recibir la bienvenida de EliteBid con la validacion inicial. Despues llega otro mail con el codigo para confirmar que el correo te pertenece.
         </Text>
       </View>
 
