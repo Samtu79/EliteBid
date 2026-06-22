@@ -111,6 +111,23 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
     }
   }
 
+  const completedPurchases = purchases.filter(isCompletedPurchase);
+  const pendingPurchases = purchases.filter((purchase) => !isCompletedPurchase(purchase));
+  const purchaseGroups = [
+    {
+      id: 'pending',
+      title: 'Pasos pendientes',
+      description: 'Completá el pago o el domicilio de entrega para continuar.',
+      purchases: pendingPurchases
+    },
+    {
+      id: 'completed',
+      title: 'Entregas en preparacion',
+      description: 'Pago acreditado y domicilio de entrega confirmado.',
+      purchases: completedPurchases
+    }
+  ];
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -148,8 +165,13 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
               <Text style={styles.emptyCopy}>Cuando ganes una pieza, va a aparecer aca con su pago y estado de entrega.</Text>
             </View>
           ) : (
-            <View style={styles.list}>
-              {purchases.map((purchase) => {
+            <View style={styles.groups}>
+              {purchaseGroups.map((group) => group.purchases.length ? (
+                <View key={group.id} style={styles.purchaseSection}>
+                  <Text style={styles.purchaseSectionTitle}>{group.title} ({group.purchases.length})</Text>
+                  <Text style={styles.purchaseSectionCopy}>{group.description}</Text>
+                  <View style={styles.list}>
+              {group.purchases.map((purchase) => {
                 const hasSavedDelivery = Boolean(purchase.deliveryAddress?.trim());
 
                 return (
@@ -228,6 +250,9 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
                 </View>
                 );
               })}
+                  </View>
+                </View>
+              ) : null)}
             </View>
           )}
         </ScrollView>
@@ -250,6 +275,10 @@ function getPurchaseStatusLabel(purchase) {
   if (purchase.paymentStatus !== 'pagada') return 'Pago pendiente';
   if (purchase.deliveryStatus === 'pendiente_direccion') return 'Falta domicilio';
   return 'En preparacion';
+}
+
+function isCompletedPurchase(purchase) {
+  return purchase.paymentStatus === 'pagada' && purchase.deliveryStatus === 'preparando_envio';
 }
 
 function getStatusTone(purchase) {
@@ -423,8 +452,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800'
   },
+  groups: {
+    gap: 24
+  },
   list: {
     gap: 16
+  },
+  purchaseSection: {
+    gap: 10
+  },
+  purchaseSectionCopy: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18
+  },
+  purchaseSectionTitle: {
+    color: colors.onSurface,
+    fontSize: 20,
+    fontWeight: '900'
   },
   loading: {
     alignItems: 'center',

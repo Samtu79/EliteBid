@@ -2715,9 +2715,13 @@ async function getUserPurchases(clienteId) {
      JOIN catalogos c ON c.identificador = i.catalogo
      JOIN subastas s ON s.identificador = c.subasta
      JOIN productos prod ON prod.identificador = i.producto
-     LEFT JOIN registro_de_subasta r ON r.cliente = a.cliente AND r.subasta = s.identificador AND r.producto = prod.identificador
-     WHERE a.cliente = ? AND p.ganador = 'si' AND i.cierre_estado = 'finalizada'
-     ORDER BY CASE WHEN r.identificador IS NULL THEN 0 ELSE 1 END, p.identificador DESC`,
+     LEFT JOIN registro_de_subasta r ON r.identificador = (
+       SELECT MAX(r2.identificador)
+       FROM registro_de_subasta r2
+       WHERE r2.cliente = a.cliente AND r2.subasta = s.identificador AND r2.producto = prod.identificador
+     )
+     WHERE a.cliente = ? AND p.ganador = 'si'
+     ORDER BY p.creado_en DESC, p.identificador DESC`,
     [SHIPPING_COST, SHIPPING_COST, clienteId]
   );
 }
