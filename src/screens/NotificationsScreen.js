@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-import { getNotifications, performNotificationAction } from '../backend/notificationService';
+import { getNotifications, markAllNotificationsRead, performNotificationAction } from '../backend/notificationService';
 import AppToast from '../components/AppToast';
 import { colors, radii } from '../theme';
 
@@ -26,6 +26,7 @@ const actionLabel = {
 export default function NotificationsScreen({ onAction, onBack, onUnreadCountChange }) {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
+  const [markingAll, setMarkingAll] = useState(false);
   const [toast, setToast] = useState(null);
 
   async function load() {
@@ -55,11 +56,29 @@ export default function NotificationsScreen({ onAction, onBack, onUnreadCountCha
     }
   }
 
+  async function handleBack() {
+    if (!notifications.some((notification) => !notification.read)) {
+      onBack?.();
+      return;
+    }
+
+    setMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+      onUnreadCountChange?.(0);
+      onBack?.();
+    } catch (error) {
+      setToast({ message: error.message, tone: 'danger' });
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={[colors.surfaceLowest, colors.surface, colors.surfaceLow]} style={StyleSheet.absoluteFill} />
       <View style={styles.topBar}>
-        <Pressable onPress={onBack} style={styles.iconButton}>
+        <Pressable disabled={markingAll} onPress={handleBack} style={styles.iconButton}>
           <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={25} />
         </Pressable>
         <Text style={styles.logo}>Notificaciones</Text>

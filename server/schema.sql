@@ -1,18 +1,18 @@
 CREATE TABLE IF NOT EXISTS paises (
   numero INT PRIMARY KEY,
-  nombre VARCHAR(120) NOT NULL,
-  nombre_corto VARCHAR(8),
-  capital VARCHAR(120) NOT NULL,
-  nacionalidad VARCHAR(120) NOT NULL,
+  nombre VARCHAR(250) NOT NULL,
+  nombreCorto VARCHAR(250),
+  capital VARCHAR(250) NOT NULL,
+  nacionalidad VARCHAR(250) NOT NULL,
   idiomas VARCHAR(120) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS personas (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
   tipo_documento ENUM('dni', 'pasaporte') DEFAULT 'dni',
-  documento VARCHAR(40) NOT NULL,
-  nombre VARCHAR(160) NOT NULL,
-  direccion VARCHAR(255),
+  documento VARCHAR(20) NOT NULL,
+  nombre VARCHAR(150) NOT NULL,
+  direccion VARCHAR(250),
   estado ENUM('activo', 'inactivo') DEFAULT 'activo',
   foto LONGBLOB,
   foto_uri MEDIUMTEXT
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS personas (
 
 CREATE TABLE IF NOT EXISTS empleados (
   identificador INT PRIMARY KEY,
-  cargo VARCHAR(120),
+  cargo VARCHAR(100),
   sector INT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -34,21 +34,21 @@ CREATE TABLE IF NOT EXISTS sectores (
 
 CREATE TABLE IF NOT EXISTS clientes (
   identificador INT PRIMARY KEY,
-  numero_pais INT,
+  numeroPais INT,
   admitido ENUM('si', 'no') DEFAULT 'si',
   categoria ENUM('comun', 'especial', 'plata', 'oro', 'platino'),
   verificador INT NOT NULL,
   CONSTRAINT fk_clientes_personas FOREIGN KEY (identificador) REFERENCES personas (identificador),
   CONSTRAINT fk_clientes_empleados FOREIGN KEY (verificador) REFERENCES empleados (identificador),
-  CONSTRAINT fk_clientes_paises FOREIGN KEY (numero_pais) REFERENCES paises (numero)
+  CONSTRAINT fk_clientes_paises FOREIGN KEY (numeroPais) REFERENCES paises (numero)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS duenios (
   identificador INT PRIMARY KEY,
-  numero_pais INT,
-  verificacion_financiera ENUM('si', 'no'),
-  verificacion_judicial ENUM('si', 'no'),
-  calificacion_riesgo INT,
+  numeroPais INT,
+  `verificaciónFinanciera` ENUM('si', 'no'),
+  `verificaciónJudicial` ENUM('si', 'no'),
+  calificacionRiesgo INT,
   verificador INT NOT NULL,
   CONSTRAINT fk_duenios_personas FOREIGN KEY (identificador) REFERENCES personas (identificador),
   CONSTRAINT fk_duenios_empleados FOREIGN KEY (verificador) REFERENCES empleados (identificador)
@@ -56,15 +56,15 @@ CREATE TABLE IF NOT EXISTS duenios (
 
 CREATE TABLE IF NOT EXISTS subastadores (
   identificador INT PRIMARY KEY,
-  matricula VARCHAR(80),
-  region VARCHAR(120),
+  matricula VARCHAR(15),
+  region VARCHAR(50),
   CONSTRAINT fk_subastadores_personas FOREIGN KEY (identificador) REFERENCES personas (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS seguros (
-  nro_poliza VARCHAR(80) PRIMARY KEY,
-  compania VARCHAR(140) NOT NULL,
-  poliza_combinada ENUM('si', 'no'),
+  nroPoliza VARCHAR(30) PRIMARY KEY,
+  compania VARCHAR(150) NOT NULL,
+  polizaCombinada ENUM('si', 'no'),
   importe DECIMAL(14,2) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -72,13 +72,13 @@ CREATE TABLE IF NOT EXISTS subastas (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
   titulo VARCHAR(180) NOT NULL,
   fecha DATE NOT NULL,
-  hora VARCHAR(10) NOT NULL,
+  hora TIME NOT NULL,
   estado ENUM('abierta', 'cerrada', 'programada'),
   subastador INT,
-  ubicacion VARCHAR(180),
-  capacidad_asistentes INT,
-  tiene_deposito ENUM('si', 'no'),
-  seguridad_propia ENUM('si', 'no'),
+  ubicacion VARCHAR(350),
+  capacidadAsistentes INT,
+  tieneDeposito ENUM('si', 'no'),
+  seguridadPropia ENUM('si', 'no'),
   categoria ENUM('comun', 'especial', 'plata', 'oro', 'platino'),
   moneda ENUM('ARS', 'USD') DEFAULT 'ARS',
   imagen_uri TEXT,
@@ -89,15 +89,15 @@ CREATE TABLE IF NOT EXISTS productos (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
   fecha DATE,
   disponible ENUM('si', 'no'),
-  descripcion_catalogo TEXT,
-  descripcion_completa TEXT NOT NULL,
+  descripcionCatalogo VARCHAR(500) DEFAULT 'No Posee',
+  descripcionCompleta VARCHAR(300) NOT NULL,
   revisor INT NOT NULL,
   duenio INT NOT NULL,
-  seguro VARCHAR(80),
+  seguro VARCHAR(30),
   imagen_uri TEXT,
   CONSTRAINT fk_productos_revisor FOREIGN KEY (revisor) REFERENCES empleados (identificador),
   CONSTRAINT fk_productos_duenio FOREIGN KEY (duenio) REFERENCES duenios (identificador),
-  CONSTRAINT fk_productos_seguro FOREIGN KEY (seguro) REFERENCES seguros (nro_poliza)
+  CONSTRAINT fk_productos_seguro FOREIGN KEY (seguro) REFERENCES seguros (nroPoliza)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS fotos (
@@ -112,33 +112,33 @@ CREATE TABLE IF NOT EXISTS fotos (
 
 CREATE TABLE IF NOT EXISTS catalogos (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
-  descripcion VARCHAR(220) NOT NULL,
+  descripcion VARCHAR(250) NOT NULL,
   subasta INT,
   responsable INT NOT NULL,
   CONSTRAINT fk_catalogos_responsable FOREIGN KEY (responsable) REFERENCES empleados (identificador),
   CONSTRAINT fk_catalogos_subasta FOREIGN KEY (subasta) REFERENCES subastas (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS items_catalogo (
+CREATE TABLE IF NOT EXISTS itemsCatalogo (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
   catalogo INT NOT NULL,
   orden_lote INT NOT NULL DEFAULT 0,
   producto INT NOT NULL,
-  precio_base DECIMAL(14,2) NOT NULL,
-  comision DECIMAL(14,2) NOT NULL,
+  precioBase DECIMAL(18,2) NOT NULL,
+  comision DECIMAL(18,2) NOT NULL,
   subastado ENUM('si', 'no') DEFAULT 'no',
-  puja_actual DECIMAL(14,2) DEFAULT 0,
+  pujaActual DECIMAL(14,2) DEFAULT 0,
   timer_inicio DATETIME,
   timer_vencimiento DATETIME,
   cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja',
   cierre_motivo VARCHAR(80),
-  CONSTRAINT fk_items_catalogo FOREIGN KEY (catalogo) REFERENCES catalogos (identificador),
+  CONSTRAINT fk_itemsCatalogo FOREIGN KEY (catalogo) REFERENCES catalogos (identificador),
   CONSTRAINT fk_items_producto FOREIGN KEY (producto) REFERENCES productos (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS asistentes (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
-  numero_postor INT NOT NULL,
+  numeroPostor INT NOT NULL,
   cliente INT NOT NULL,
   subasta INT NOT NULL,
   UNIQUE KEY uq_asistente_cliente_subasta (cliente, subasta),
@@ -151,22 +151,22 @@ CREATE TABLE IF NOT EXISTS pujos (
   asistente INT NOT NULL,
   item INT NOT NULL,
   medio_pago INT,
-  importe DECIMAL(14,2) NOT NULL,
+  importe DECIMAL(18,2) NOT NULL,
   ganador ENUM('si', 'no') DEFAULT 'no',
   creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_pujos_asistente FOREIGN KEY (asistente) REFERENCES asistentes (identificador),
-  CONSTRAINT fk_pujos_item FOREIGN KEY (item) REFERENCES items_catalogo (identificador)
+  CONSTRAINT fk_pujos_item FOREIGN KEY (item) REFERENCES itemsCatalogo (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS registro_de_subasta (
+CREATE TABLE IF NOT EXISTS registroDeSubasta (
   identificador INT AUTO_INCREMENT PRIMARY KEY,
   subasta INT NOT NULL,
   duenio INT NOT NULL,
   producto INT NOT NULL,
   cliente INT NOT NULL,
   medio_pago INT,
-  importe DECIMAL(14,2) NOT NULL,
-  comision DECIMAL(14,2) NOT NULL,
+  importe DECIMAL(18,2) NOT NULL,
+  comision DECIMAL(18,2) NOT NULL,
   estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente',
   direccion_entrega VARCHAR(255),
   creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -186,6 +186,25 @@ CREATE TABLE IF NOT EXISTS medios_pago (
   verificado ENUM('si', 'no') DEFAULT 'no',
   seleccionado ENUM('si', 'no') DEFAULT 'no',
   CONSTRAINT fk_medios_pago_cliente FOREIGN KEY (cliente) REFERENCES clientes (identificador)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Estructura adicional: controla la presencia activa sin alterar la tabla
+-- original de asistentes, que conserva el historial de participación.
+CREATE TABLE IF NOT EXISTS salas_activas (
+  cliente INT NOT NULL,
+  subasta INT NOT NULL,
+  ingresado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (cliente, subasta),
+  CONSTRAINT fk_salas_activas_cliente FOREIGN KEY (cliente) REFERENCES clientes (identificador),
+  CONSTRAINT fk_salas_activas_subasta FOREIGN KEY (subasta) REFERENCES subastas (identificador)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS notificaciones_leidas (
+  cliente INT NOT NULL,
+  notificacion_id VARCHAR(160) NOT NULL,
+  leida_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (cliente, notificacion_id),
+  CONSTRAINT fk_notificacion_leida_cliente FOREIGN KEY (cliente) REFERENCES clientes (identificador)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS documentos_identidad (

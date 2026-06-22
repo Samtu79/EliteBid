@@ -9,3 +9,9 @@ export async function performNotificationAction(notificationId) {
     method: 'POST'
   });
 }
+
+export async function markAllNotificationsRead() {
+  return apiRequest('/notificaciones/leer-todas', {
+    method: 'PATCH'
+  });
+}

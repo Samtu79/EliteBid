@@ -15,6 +15,10 @@ async function initDatabase() {
     }
   }
 
+  // La estructura de clase usa nombres camelCase. Antes de cargar el esquema
+  // nuevo migramos instalaciones que se crearon con los nombres internos
+  // snake_case, sin perder registros existentes.
+  await migrateLegacyBaseSchemaNames();
   const schema = await fs.readFile(path.join(__dirname, 'schema.sql'), 'utf8');
   await getPool().query(schema);
   await migrateSecuritySchema();
@@ -24,9 +28,9 @@ async function initDatabase() {
 
 async function normalizeUnstartedLotItems() {
   await run(
-    `UPDATE items_catalogo i
+    `UPDATE itemsCatalogo i
      LEFT JOIN pujos p ON p.item = i.identificador
-     SET i.puja_actual = 0
+     SET i.pujaActual = 0
      WHERE p.identificador IS NULL
        AND i.cierre_estado = 'esperando_puja'
        AND i.timer_vencimiento IS NULL`
@@ -103,12 +107,12 @@ async function migrateSecuritySchema() {
     'ALTER TABLE usuarios ADD COLUMN password_reset_expires_at DATETIME'
   );
   await addColumnIfMissing(
-    'items_catalogo',
+    'itemsCatalogo',
     'orden_lote',
-    'ALTER TABLE items_catalogo ADD COLUMN orden_lote INT NOT NULL DEFAULT 0 AFTER catalogo'
+    'ALTER TABLE itemsCatalogo ADD COLUMN orden_lote INT NOT NULL DEFAULT 0 AFTER catalogo'
   );
   const catalogItems = await query(
-    'SELECT identificador AS id, catalogo AS catalogId, orden_lote AS lotOrder FROM items_catalogo ORDER BY catalogo ASC, identificador ASC'
+    'SELECT identificador AS id, catalogo AS catalogId, orden_lote AS lotOrder FROM itemsCatalogo ORDER BY catalogo ASC, identificador ASC'
   );
   let currentCatalogId = null;
   let lotOrder = 0;
@@ -119,29 +123,29 @@ async function migrateSecuritySchema() {
     }
     lotOrder += 1;
     if (!Number(item.lotOrder)) {
-      await run('UPDATE items_catalogo SET orden_lote = ? WHERE identificador = ?', [lotOrder, item.id]);
+      await run('UPDATE itemsCatalogo SET orden_lote = ? WHERE identificador = ?', [lotOrder, item.id]);
     }
   }
   await addColumnIfMissing(
-    'items_catalogo',
+    'itemsCatalogo',
     'timer_inicio',
-    'ALTER TABLE items_catalogo ADD COLUMN timer_inicio DATETIME AFTER puja_actual'
+    'ALTER TABLE itemsCatalogo ADD COLUMN timer_inicio DATETIME AFTER pujaActual'
   );
   await addColumnIfMissing(
-    'items_catalogo',
+    'itemsCatalogo',
     'timer_vencimiento',
-    'ALTER TABLE items_catalogo ADD COLUMN timer_vencimiento DATETIME AFTER timer_inicio'
+    'ALTER TABLE itemsCatalogo ADD COLUMN timer_vencimiento DATETIME AFTER timer_inicio'
   );
   await addColumnIfMissing(
-    'items_catalogo',
+    'itemsCatalogo',
     'cierre_estado',
-    "ALTER TABLE items_catalogo ADD COLUMN cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja' AFTER timer_vencimiento"
+    "ALTER TABLE itemsCatalogo ADD COLUMN cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja' AFTER timer_vencimiento"
   );
-  await run("ALTER TABLE items_catalogo MODIFY cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja'");
+  await run("ALTER TABLE itemsCatalogo MODIFY cierre_estado ENUM('esperando_puja', 'en_cuenta', 'finalizada') DEFAULT 'esperando_puja'");
   await addColumnIfMissing(
-    'items_catalogo',
+    'itemsCatalogo',
     'cierre_motivo',
-    'ALTER TABLE items_catalogo ADD COLUMN cierre_motivo VARCHAR(80) AFTER cierre_estado'
+    'ALTER TABLE itemsCatalogo ADD COLUMN cierre_motivo VARCHAR(80) AFTER cierre_estado'
   );
   await addColumnIfMissing(
     'pujos',
@@ -149,20 +153,20 @@ async function migrateSecuritySchema() {
     'ALTER TABLE pujos ADD COLUMN medio_pago INT AFTER item'
   );
   await addColumnIfMissing(
-    'registro_de_subasta',
+    'registroDeSubasta',
     'medio_pago',
-    'ALTER TABLE registro_de_subasta ADD COLUMN medio_pago INT AFTER cliente'
+    'ALTER TABLE registroDeSubasta ADD COLUMN medio_pago INT AFTER cliente'
   );
   await addColumnIfMissing(
-    'registro_de_subasta',
+    'registroDeSubasta',
     'estado_pago',
-    "ALTER TABLE registro_de_subasta ADD COLUMN estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente' AFTER comision"
+    "ALTER TABLE registroDeSubasta ADD COLUMN estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente' AFTER comision"
   );
-  await run("ALTER TABLE registro_de_subasta MODIFY estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente'");
+  await run("ALTER TABLE registroDeSubasta MODIFY estado_pago ENUM('pendiente', 'pagada', 'multa') DEFAULT 'pendiente'");
   await addColumnIfMissing(
-    'registro_de_subasta',
+    'registroDeSubasta',
     'direccion_entrega',
-    'ALTER TABLE registro_de_subasta ADD COLUMN direccion_entrega VARCHAR(255) AFTER estado_pago'
+    'ALTER TABLE registroDeSubasta ADD COLUMN direccion_entrega VARCHAR(255) AFTER estado_pago'
   );
   await run("ALTER TABLE subastas MODIFY moneda ENUM('ARS', 'USD') DEFAULT 'ARS'");
   await run("ALTER TABLE medios_pago MODIFY moneda ENUM('ARS', 'USD') DEFAULT 'ARS'");
@@ -185,6 +189,15 @@ async function migrateSecuritySchema() {
       fondos_presentados_en DATETIME,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_penalidad_fondos_penalidad FOREIGN KEY (penalidad) REFERENCES penalidades (identificador)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+  await run(
+    `CREATE TABLE IF NOT EXISTS notificaciones_leidas (
+      cliente INT NOT NULL,
+      notificacion_id VARCHAR(160) NOT NULL,
+      leida_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (cliente, notificacion_id),
+      CONSTRAINT fk_notificacion_leida_cliente FOREIGN KEY (cliente) REFERENCES clientes (identificador)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   );
   await run(
@@ -255,7 +268,7 @@ function formatTime(date) {
 async function resetAuctionSeedData() {
   await run('CREATE TEMPORARY TABLE IF NOT EXISTS productos_subastas_cleanup (identificador INT PRIMARY KEY)');
   await run('DELETE FROM productos_subastas_cleanup');
-  await run('INSERT IGNORE INTO productos_subastas_cleanup SELECT DISTINCT producto FROM items_catalogo');
+  await run('INSERT IGNORE INTO productos_subastas_cleanup SELECT DISTINCT producto FROM itemsCatalogo');
   await run(
     `UPDATE solicitudes_lotes
      SET estado = CASE WHEN estado = 'en_subasta' THEN 'pendiente' ELSE estado END,
@@ -267,11 +280,11 @@ async function resetAuctionSeedData() {
     `DELETE pf FROM penalidad_falta_fondos pf
      JOIN pujos p ON p.identificador = pf.puja`
   );
-  await run('DELETE FROM registro_de_subasta');
+  await run('DELETE FROM registroDeSubasta');
   await run('DELETE FROM favoritos');
   await run('DELETE FROM pujos');
   await run('DELETE FROM asistentes');
-  await run('DELETE FROM items_catalogo');
+  await run('DELETE FROM itemsCatalogo');
   await run('DELETE FROM catalogos');
   await run('DELETE FROM subastas');
   await run(
@@ -284,20 +297,20 @@ async function resetAuctionSeedData() {
   );
   await run('ALTER TABLE subastas AUTO_INCREMENT = 1');
   await run('ALTER TABLE catalogos AUTO_INCREMENT = 1');
-  await run('ALTER TABLE items_catalogo AUTO_INCREMENT = 1');
+  await run('ALTER TABLE itemsCatalogo AUTO_INCREMENT = 1');
   await run('ALTER TABLE pujos AUTO_INCREMENT = 1');
   await run('ALTER TABLE asistentes AUTO_INCREMENT = 1');
-  await run('ALTER TABLE registro_de_subasta AUTO_INCREMENT = 1');
+  await run('ALTER TABLE registroDeSubasta AUTO_INCREMENT = 1');
 }
 
 async function seedDatabase() {
   await run(
-    `INSERT IGNORE INTO paises (numero, nombre, nombre_corto, capital, nacionalidad, idiomas)
+    `INSERT IGNORE INTO paises (numero, nombre, nombreCorto, capital, nacionalidad, idiomas)
      VALUES
      (32, 'Argentina', 'AR', 'Buenos Aires', 'Argentina', 'Espanol')`
   );
-  await run('UPDATE clientes SET numero_pais = ? WHERE numero_pais IS NULL OR numero_pais <> ?', [32, 32]);
-  await run('UPDATE duenios SET numero_pais = ? WHERE numero_pais IS NULL OR numero_pais <> ?', [32, 32]);
+  await run('UPDATE clientes SET numeroPais = ? WHERE numeroPais IS NULL OR numeroPais <> ?', [32, 32]);
+  await run('UPDATE duenios SET numeroPais = ? WHERE numeroPais IS NULL OR numeroPais <> ?', [32, 32]);
   await run('DELETE FROM paises WHERE numero <> ?', [32]);
 
   await run(
@@ -318,7 +331,7 @@ async function seedDatabase() {
     [1, 'Verificacion y catalogacion', 'VER', 2]
   );
   await run(
-    `INSERT IGNORE INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
+    `INSERT IGNORE INTO clientes (identificador, numeroPais, admitido, categoria, verificador)
      VALUES (?, ?, ?, ?, ?)`,
     [1, 32, 'si', 'platino', 2]
   );
@@ -328,16 +341,16 @@ async function seedDatabase() {
     [4, '00000000', 'Empresa EliteBid', 'Av. Alvear 1800, CABA', 'activo']
   );
   await run(
-    `INSERT IGNORE INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
+    `INSERT IGNORE INTO clientes (identificador, numeroPais, admitido, categoria, verificador)
      VALUES (?, ?, ?, ?, ?)`,
     [4, 32, 'si', 'platino', 2]
   );
-  await run('UPDATE registro_de_subasta SET cliente = ? WHERE cliente = ?', [4, 900001]);
+  await run('UPDATE registroDeSubasta SET cliente = ? WHERE cliente = ?', [4, 900001]);
   await run('DELETE FROM clientes WHERE identificador = ?', [900001]);
   await run('DELETE FROM personas WHERE identificador = ?', [900001]);
   await run("UPDATE clientes SET categoria = 'platino' WHERE identificador = ?", [1]);
   await run(
-    `INSERT IGNORE INTO duenios (identificador, numero_pais, verificacion_financiera, verificacion_judicial, calificacion_riesgo, verificador)
+    `INSERT IGNORE INTO duenios (identificador, numeroPais, \`verificaciónFinanciera\`, \`verificaciónJudicial\`, calificacionRiesgo, verificador)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [3, 32, 'si', 'si', 2, 2]
   );
@@ -416,7 +429,7 @@ async function seedDatabase() {
       [account.id, account.document, account.name, 'Cuenta interna de demostracion']
     );
     await run(
-      `INSERT IGNORE INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
+      `INSERT IGNORE INTO clientes (identificador, numeroPais, admitido, categoria, verificador)
        VALUES (?, ?, 'si', ?, ?)`,
       [account.id, 32, account.category, 2]
     );
@@ -778,7 +791,7 @@ async function seedDatabase() {
     },
     {
       id: 14,
-      title: 'Diseño industrial y luminarias italianas',
+      title: 'DiseÃ±o industrial y luminarias italianas',
       ...schedule(390),
       status: 'programada',
       category: 'oro',
@@ -789,7 +802,7 @@ async function seedDatabase() {
       basePrice: 6800,
       extraItems: [
         {
-          product: 'Par de apliques murales de diseño modernista.',
+          product: 'Par de apliques murales de diseÃ±o modernista.',
           image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
           basePrice: 2400
         },
@@ -823,7 +836,7 @@ async function seedDatabase() {
 
 async function seedAuction(auction) {
   await run(
-    `INSERT IGNORE INTO subastas (identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidad_asistentes, tiene_deposito, seguridad_propia, categoria, moneda, imagen_uri)
+    `INSERT IGNORE INTO subastas (identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidadAsistentes, tieneDeposito, seguridadPropia, categoria, moneda, imagen_uri)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       auction.id,
@@ -842,7 +855,7 @@ async function seedAuction(auction) {
     ]
   );
   await run(
-    `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
+    `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcionCatalogo, descripcionCompleta, revisor, duenio, seguro, imagen_uri)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [auction.id, auction.date, 'si', auction.product, auction.product, 2, 3, null, auction.image]
   );
@@ -853,7 +866,7 @@ async function seedAuction(auction) {
     [auction.id, `Catalogo ${auction.title}`, auction.id, 2]
   );
   await run(
-    `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
+    `INSERT IGNORE INTO itemsCatalogo (identificador, catalogo, orden_lote, producto, precioBase, comision, subastado, pujaActual)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.12, 'no', auction.currentBid || 0]
   );
@@ -877,18 +890,72 @@ async function seedAuction(auction) {
     const productId = auction.id * 100 + index + 1;
     const itemId = auction.id * 100 + index + 1;
     await run(
-      `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
+      `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcionCatalogo, descripcionCompleta, revisor, duenio, seguro, imagen_uri)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [productId, auction.date, 'si', item.product, item.product, 2, 3, null, item.image || auction.image]
     );
     await seedProductPhotos(productId, item.image || auction.image);
     await run(
-      `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
+      `INSERT IGNORE INTO itemsCatalogo (identificador, catalogo, orden_lote, producto, precioBase, comision, subastado, pujaActual)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, auction.id, index + 2, productId, item.basePrice, item.basePrice * 0.12, 'no', item.currentBid || 0]
     );
   }
 
+}
+
+async function migrateLegacyBaseSchemaNames() {
+  await renameTableIfNeeded('items_catalogo', 'itemsCatalogo');
+  await renameTableIfNeeded('registro_de_subasta', 'registroDeSubasta');
+
+  const columnRenames = [
+    ['paises', 'nombre_corto', 'nombreCorto'],
+    ['clientes', 'numero_pais', 'numeroPais'],
+    ['duenios', 'numero_pais', 'numeroPais'],
+    ['duenios', 'verificacion_financiera', 'verificaciónFinanciera'],
+    ['duenios', 'verificacion_judicial', 'verificaciónJudicial'],
+    ['duenios', 'calificacion_riesgo', 'calificacionRiesgo'],
+    ['seguros', 'nro_poliza', 'nroPoliza'],
+    ['seguros', 'poliza_combinada', 'polizaCombinada'],
+    ['subastas', 'capacidad_asistentes', 'capacidadAsistentes'],
+    ['subastas', 'tiene_deposito', 'tieneDeposito'],
+    ['subastas', 'seguridad_propia', 'seguridadPropia'],
+    ['productos', 'descripcion_catalogo', 'descripcionCatalogo'],
+    ['productos', 'descripcion_completa', 'descripcionCompleta'],
+    ['itemsCatalogo', 'precio_base', 'precioBase'],
+    ['itemsCatalogo', 'puja_actual', 'pujaActual'],
+    ['asistentes', 'numero_postor', 'numeroPostor']
+  ];
+
+  for (const [table, legacyName, expectedName] of columnRenames) {
+    await renameColumnIfNeeded(table, legacyName, expectedName);
+  }
+}
+
+async function renameTableIfNeeded(legacyName, expectedName) {
+  const rows = await query(
+    `SELECT table_name AS tableName
+     FROM information_schema.tables
+     WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
+    [legacyName, expectedName]
+  );
+  const found = new Set(rows.map((row) => row.tableName));
+  if (found.has(legacyName) && !found.has(expectedName)) {
+    await run(`RENAME TABLE \`${legacyName}\` TO \`${expectedName}\``);
+  }
+}
+
+async function renameColumnIfNeeded(table, legacyName, expectedName) {
+  const rows = await query(
+    `SELECT column_name AS columnName
+     FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name IN (?, ?)`,
+    [table, legacyName, expectedName]
+  );
+  const found = new Set(rows.map((row) => row.columnName));
+  if (found.has(legacyName) && !found.has(expectedName)) {
+    await run(`ALTER TABLE \`${table}\` RENAME COLUMN \`${legacyName}\` TO \`${expectedName}\``);
+  }
 }
 
 async function seedProductPhotos(productId, uri) {
