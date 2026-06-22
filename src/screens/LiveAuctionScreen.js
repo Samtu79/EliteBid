@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +18,6 @@ import { getAuctionDetail, placeBid } from '../backend/auctionService';
 import { getPaymentMethods } from '../backend/paymentService';
 import AppToast from '../components/AppToast';
 import BottomNav, { bottomNavHeight } from '../components/BottomNav';
-import ProductPhotoCarousel from '../components/ProductPhotoCarousel';
 import { colors, radii } from '../theme';
 
 const SHIPPING_COST = 25000;
@@ -25,6 +25,7 @@ const BID_RANGE_LIMIT_CATEGORIES = new Set(['comun', 'especial', 'plata']);
 const AUCTION_POLL_INTERVAL_MS = 800;
 
 export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpenNotifications, user }) {
+  const { width } = useWindowDimensions();
   const [auction, setAuction] = useState(null);
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [toast, setToast] = useState(null);
   const [winnerCelebration, setWinnerCelebration] = useState(null);
+  const [stagePhotoIndex, setStagePhotoIndex] = useState(0);
   const amountRef = useRef('');
   const userEditedAmountRef = useRef(false);
   const activeItemIdRef = useRef(null);
@@ -157,6 +159,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       typedAmount: parseCurrency(amount)
     };
   }, [amount, auction]);
+  const stagePhotoUris = useMemo(() => {
+    const uniqueUris = [...new Set([...(auction?.photoUrls || []), auction?.imageUrl].filter(Boolean))];
+    return uniqueUris.length ? uniqueUris : [];
+  }, [auction?.imageUrl, auction?.photoUrls]);
+  const stageWidth = Math.max(280, width - 32);
 
   function adjustBid(direction) {
     const startingAmount = Number.isFinite(rules.typedAmount) && rules.typedAmount > 0
@@ -332,12 +339,33 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.stage}>
-          <Image source={{ uri: auction.imageUrl }} style={styles.stageImage} />
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            onMomentumScrollEnd={(event) => {
+              const nextIndex = Math.round(event.nativeEvent.contentOffset.x / stageWidth);
+              setStagePhotoIndex(Math.max(0, Math.min(stagePhotoUris.length - 1, nextIndex)));
+            }}
+            pagingEnabled
+            scrollEventThrottle={16}
+            showsHorizontalScrollIndicator={false}
+            style={StyleSheet.absoluteFill}
+          >
+            {stagePhotoUris.map((uri, index) => (
+              <Image key={`${uri}-${index}`} source={{ uri }} style={[styles.stageImage, { width: stageWidth }]} />
+            ))}
+          </ScrollView>
           <LinearGradient
             colors={['rgba(20, 5, 43, 0.08)', 'rgba(20, 5, 43, 0.32)', 'rgba(20, 5, 43, 0.95)']}
             locations={[0, 0.48, 1]}
             style={StyleSheet.absoluteFill}
           />
+          {stagePhotoUris.length > 1 ? (
+            <View style={styles.stagePhotoBadge}>
+              <MaterialCommunityIcons color={colors.onSurface} name="image-multiple-outline" size={13} />
+              <Text style={styles.stagePhotoBadgeText}>{stagePhotoIndex + 1}/{stagePhotoUris.length}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.stageCopy}>
             <Text style={styles.stageMeta}>
@@ -349,20 +377,17 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             <Text numberOfLines={2} style={styles.stageDescription}>
               {auction.description}
             </Text>
+            {stagePhotoUris.length > 1 ? (
+              <View style={styles.stageDots}>
+                {stagePhotoUris.map((uri, index) => (
+                  <View
+                    key={`stage-dot-${uri}-${index}`}
+                    style={[styles.stageDot, stagePhotoIndex === index && styles.stageDotActive]}
+                  />
+                ))}
+              </View>
+            ) : null}
           </View>
-        </View>
-
-        <View style={styles.productPhotosPanel}>
-          <View style={styles.productPhotosHeader}>
-            <MaterialCommunityIcons color={colors.primary} name="image-multiple-outline" size={18} />
-            <Text style={styles.productPhotosTitle}>Fotos del lote actual</Text>
-          </View>
-          <ProductPhotoCarousel
-            fallbackUri={auction.imageUrl}
-            height={150}
-            photos={auction.photoUrls}
-            title="Deslizá para revisar detalles sin salir de la sala"
-          />
         </View>
 
         <View style={styles.bidSurface}>
@@ -949,26 +974,6 @@ const styles = StyleSheet.create({
   paymentPanel: {
     marginTop: 12
   },
-  productPhotosHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8
-  },
-  productPhotosPanel: {
-    backgroundColor: 'rgba(38, 24, 62, 0.88)',
-    borderColor: 'rgba(204, 193, 255, 0.14)',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    marginHorizontal: 4,
-    marginTop: 10,
-    padding: 12
-  },
-  productPhotosTitle: {
-    color: colors.onSurface,
-    fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase'
-  },
   rangeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1056,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   stageImage: {
     height: '100%',
-    width: '100%'
+    resizeMode: 'cover'
   },
   stageMeta: {
     color: colors.tertiary,
@@ -1071,6 +1076,40 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0,
     lineHeight: 26
+  },
+  stageDot: {
+    backgroundColor: 'rgba(201, 196, 211, 0.36)',
+    borderRadius: radii.full,
+    height: 6,
+    width: 6
+  },
+  stageDotActive: {
+    backgroundColor: colors.primary,
+    width: 18
+  },
+  stageDots: {
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 10
+  },
+  stagePhotoBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 5, 43, 0.74)',
+    borderColor: 'rgba(204, 193, 255, 0.18)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    position: 'absolute',
+    right: 12,
+    top: 12
+  },
+  stagePhotoBadgeText: {
+    color: colors.onSurface,
+    fontSize: 10,
+    fontWeight: '900'
   },
   stepButton: {
     alignItems: 'center',
