@@ -1234,6 +1234,19 @@ async function main() {
     if ((generatedAuction.catalog[0].photoUrls || []).length < 6) {
       throw new Error('La subasta generada no conservo las fotos del producto');
     }
+    await db.query(
+      `UPDATE subastas s
+       JOIN catalogos c ON c.subasta = s.identificador
+       JOIN items_catalogo i ON i.catalogo = c.identificador
+       SET s.estado = 'cerrada', i.subastado = 'si', i.cierre_estado = 'finalizada', i.cierre_motivo = 'qa_cierre_total'
+       WHERE s.identificador = ?`,
+      [acceptedLot.generatedAuctionId]
+    );
+    const auctionsAfterGeneratedClose = await request(`/auctions?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
+    if (auctionsAfterGeneratedClose.some((auction) => Number(auction.id) === Number(acceptedLot.generatedAuctionId))) {
+      throw new Error('Una subasta con todos sus productos subastados no debe aparecer en el listado');
+    }
+    logOk('lote completo subastado desaparece del catalogo');
     const acceptedAgain = await request(`/solicitudes-venta/${createdLot.id}/aceptar-condiciones`, { method: 'POST', token: userA.sessionToken });
     if (Number(acceptedAgain.generatedAuctionId) !== Number(acceptedLot.generatedAuctionId)) {
       throw new Error('Aceptar condiciones dos veces genero otra subasta');
@@ -1509,6 +1522,15 @@ async function main() {
     if (!closedDetail.recentWin || closedDetail.recentWin.paymentStatus !== 'pagada') {
       throw new Error('Al ganar no se informo la adjudicacion pagada para mostrar popup');
     }
+    const closedCatalogItem = closedDetail.catalog.find((item) => Number(item.itemId) === Number(room.itemId));
+    if (!closedCatalogItem || closedCatalogItem.sold !== 'si' || closedCatalogItem.closureStatus !== 'finalizada') {
+      throw new Error('El producto comprado no quedo marcado como subastado en catalogo');
+    }
+    const pdfClosedCatalog = await request(`/subastas/${activeCommon.id}/catalogo/${room.itemId}`, { token: userA.sessionToken });
+    if (!pdfClosedCatalog.subastado || pdfClosedCatalog.estadoProducto !== 'subastado') {
+      throw new Error('El endpoint PDF no informa el producto como subastado');
+    }
+    logOk('producto comprado figura como subastado');
     const purchases = await request(`/users/${userA.clienteId}/purchases`, { token: userA.sessionToken });
     const wonPurchase = purchases.find((purchase) => Number(purchase.id) === Number(comebackBid.bid.id));
     if (!wonPurchase || wonPurchase.paymentStatus !== 'pagada') {

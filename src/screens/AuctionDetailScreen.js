@@ -195,7 +195,15 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
             {(auction.catalog || []).map((item, index) => (
               <View key={item.itemId || item.productId || index} style={styles.catalogItem}>
                 <View style={styles.catalogCopy}>
-                  <Text style={styles.catalogItemTitle}>Pieza {index + 1}</Text>
+                  <View style={styles.catalogItemHeader}>
+                    <Text style={styles.catalogItemTitle}>Pieza {index + 1}</Text>
+                    {item.sold === 'si' || item.closureStatus === 'finalizada' ? (
+                      <View style={styles.soldChip}>
+                        <MaterialCommunityIcons color="#73E6A2" name="check-decagram" size={13} />
+                        <Text style={styles.soldChipText}>Subastado</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <Text numberOfLines={2} style={styles.catalogDescription}>{item.description}</Text>
                   <Text style={styles.catalogPrice}>
                     {item.basePrice == null ? 'Precio reservado para usuarios registrados' : `Base ${formatMoney(item.basePrice)}`}
@@ -368,6 +376,12 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 13,
     fontWeight: '900'
+  },
+  catalogItemHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between'
   },
   catalogPrice: {
     color: colors.primary,
@@ -551,6 +565,23 @@ const styles = StyleSheet.create({
   },
   statusTextLive: {
     color: colors.error
+  },
+  soldChip: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(115, 230, 162, 0.1)',
+    borderColor: 'rgba(115, 230, 162, 0.24)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  soldChipText: {
+    color: '#73E6A2',
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase'
   },
   title: {
     color: colors.onSurface,

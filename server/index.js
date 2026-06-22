@@ -1736,7 +1736,7 @@ async function getAuctionRows(viewer = null) {
   const restrictedCatalog = !viewer || viewer.rol === 'invitado';
   const auctionVisibilityClause = restrictedCatalog
     ? "WHERE s.estado = 'programada' AND s.fecha >= CURRENT_DATE()"
-    : "WHERE s.estado <> 'programada' OR s.fecha >= CURRENT_DATE()";
+    : "WHERE s.estado <> 'cerrada' AND (s.estado <> 'programada' OR s.fecha >= CURRENT_DATE())";
   const rows = await query(
     `SELECT s.identificador AS id, s.titulo AS title, DATE_FORMAT(s.fecha, '%Y-%m-%d') AS date,
       s.hora AS time, s.estado AS status, s.categoria AS category, s.moneda AS currency,
@@ -3202,15 +3202,18 @@ function toSaleRequestContract(lot) {
 }
 
 function toCatalogLot(detail) {
+  const sold = detail.sold === 'si' || detail.closureStatus === 'finalizada';
   return {
     id: String(detail.itemId || detail.productId || detail.id),
     descripcion: detail.description,
     estado: detail.status,
+    estadoProducto: sold ? 'subastado' : 'disponible',
     fotos: detail.photoUrls?.length ? detail.photoUrls : (detail.imageUrl ? [detail.imageUrl] : []),
     loteId: String(detail.itemId || detail.productId || detail.id),
     nombre: detail.title || detail.auctionTitle || detail.description,
     precioBase: detail.basePrice,
-    pujaActual: detail.currentBid
+    pujaActual: detail.currentBid,
+    subastado: sold
   };
 }
 
