@@ -139,7 +139,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       };
     }
 
-    const currentBid = Number(auction.currentBid || auction.basePrice || 0);
+    const currentBid = getEffectiveAuctionAmount(auction);
     const basePrice = Number(auction.basePrice || 0);
     const bidStep = Math.max(100, Math.ceil((basePrice * 0.01) / 100) * 100);
     const hasBidRangeLimit = BID_RANGE_LIMIT_CATEGORIES.has(String(auction.category || '').toLowerCase());
@@ -274,7 +274,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     );
 
     const currentAmount = parseCurrency(amountRef.current);
-    const currentBid = Number(detail?.currentBid || detail?.basePrice || 0);
+    const currentBid = getEffectiveAuctionAmount(detail);
     if (forceSuggestedBid || (!currentUserLeads && (!userEditedAmountRef.current || currentAmount <= currentBid))) {
       const suggested = formatInputAmount(getSuggestedBid(detail));
       amountRef.current = suggested;
@@ -580,7 +580,12 @@ function FeedRow({ bid }) {
 }
 
 function getSuggestedBid(auction) {
-  return Number(auction.currentBid || auction.basePrice || 0) + Number(auction.basePrice || 0) * 0.01;
+  return getEffectiveAuctionAmount(auction) + Number(auction?.basePrice || 0) * 0.01;
+}
+
+function getEffectiveAuctionAmount(auction) {
+  const currentBid = Number(auction?.currentBid || 0);
+  return currentBid > 0 ? currentBid : Number(auction?.basePrice || 0);
 }
 
 function formatCountdown(seconds) {

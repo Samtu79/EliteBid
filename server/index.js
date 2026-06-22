@@ -1974,7 +1974,9 @@ async function ensureActiveAuctionItem(auctionId) {
   if (!auction || auction.status !== 'abierta') return null;
 
   const item = await first(
-    `SELECT identificador AS itemId, timer_vencimiento AS timerExpiresAt
+    `SELECT identificador AS itemId, puja_actual AS currentBid,
+      cierre_estado AS closureStatus, timer_vencimiento AS timerExpiresAt,
+      GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), timer_vencimiento)) AS timerSecondsRemaining
      FROM items_catalogo
      WHERE catalogo = (SELECT identificador FROM catalogos WHERE subasta = ? LIMIT 1)
        AND cierre_estado <> 'finalizada'
@@ -1988,16 +1990,20 @@ async function ensureActiveAuctionItem(auctionId) {
     return null;
   }
 
-  if (!item.timerExpiresAt) {
-    const firstBidTimerSeconds = DEMO_LIVE_AUCTION_IDS.includes(Number(auctionId))
-      ? DEMO_FIRST_BID_TIMER_SECONDS
-      : FIRST_BID_TIMER_SECONDS;
+  const hasBid = Number(item.currentBid || 0) > 0 || item.closureStatus === 'en_cuenta';
+  const timerSeconds = hasBid
+    ? BID_TIMER_SECONDS
+    : (DEMO_LIVE_AUCTION_IDS.includes(Number(auctionId)) ? DEMO_FIRST_BID_TIMER_SECONDS : FIRST_BID_TIMER_SECONDS);
+  const staleTimer = Number(item.timerSecondsRemaining || 0) > timerSeconds;
+
+  if (!item.timerExpiresAt || staleTimer) {
     await run(
       `UPDATE items_catalogo
        SET timer_inicio = UTC_TIMESTAMP(), timer_vencimiento = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND),
-         cierre_estado = 'esperando_puja', cierre_motivo = NULL
-       WHERE identificador = ? AND cierre_estado <> 'finalizada' AND timer_vencimiento IS NULL`,
-      [firstBidTimerSeconds, item.itemId]
+         cierre_estado = ?, cierre_motivo = NULL
+       WHERE identificador = ? AND cierre_estado <> 'finalizada'
+         AND (timer_vencimiento IS NULL OR timer_vencimiento > DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND))`,
+      [timerSeconds, hasBid ? 'en_cuenta' : 'esperando_puja', item.itemId, timerSeconds]
     );
   }
 
@@ -2192,7 +2198,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   if (activeLeadingBid) {
     throw new Error(`Ya vas primero en "${activeLeadingBid.title}". Podes mirar otras subastas, pero no ofertar hasta que te superen o cierre el contador.`);
   }
-  const currentBid = Number(detail.currentBid || detail.basePrice || 0);
+  const currentBid = getEffectiveAuctionAmount(detail.currentBid, detail.basePrice);
   const basePrice = Number(detail.basePrice || 0);
   const hasBidRangeLimit = BID_RANGE_LIMIT_CATEGORIES.has(String(detail.category || '').toLowerCase());
   const minBid = currentBid + basePrice * 0.01;
@@ -2236,6 +2242,11 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
     bid: { id: result.insertId, amount },
     bounds: { min: hasBidRangeLimit ? minBid : currentBid + 1, max: hasBidRangeLimit ? maxBid : null }
   };
+}
+
+function getEffectiveAuctionAmount(currentBid, basePrice) {
+  const parsedCurrentBid = Number(currentBid || 0);
+  return parsedCurrentBid > 0 ? parsedCurrentBid : Number(basePrice || 0);
 }
 
 async function getClientCategory(clienteId) {

@@ -62,7 +62,9 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
   const suggestedBid = useMemo(() => {
     if (!auction) return 0;
 
-    return Number(auction.currentBid || auction.basePrice || 0) + Number(auction.basePrice || 0) * 0.01;
+    const currentBid = Number(auction.currentBid || 0);
+    const activeAmount = currentBid > 0 ? currentBid : Number(auction.basePrice || 0);
+    return activeAmount + Number(auction.basePrice || 0) * 0.01;
   }, [auction]);
 
   async function joinRoom() {

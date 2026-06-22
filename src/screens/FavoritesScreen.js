@@ -106,7 +106,7 @@ export default function FavoritesScreen({ onBack, onNavigate, onOpenAuctionDetai
                   <View style={styles.cardFooter}>
                     <View>
                       <Text style={styles.priceLabel}>Puja actual</Text>
-                      <Text style={styles.price}>{formatMoney(auction.currentBid || auction.basePrice)}</Text>
+                      <Text style={styles.price}>{formatMoney(Number(auction.currentBid || 0) > 0 ? auction.currentBid : auction.basePrice)}</Text>
                     </View>
                     <View style={styles.endsIn}>
                       <MaterialCommunityIcons color={colors.onSurfaceVariant} name="timer-outline" size={14} />
