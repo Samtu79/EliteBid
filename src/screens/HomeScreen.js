@@ -280,7 +280,7 @@ function AuctionCard({ auction, isFavorite, onPress, onToggleFavorite }) {
           {auction.title}
         </Text>
         <Text style={styles.cardLabel}>{hasBid ? 'Puja actual' : 'Valor inicial'}</Text>
-        <Text style={styles.cardPrice}>{priceAvailable ? formatMoney(displayedPrice) : 'Verificacion pendiente'}</Text>
+        <Text style={styles.cardPrice}>{priceAvailable ? formatMoney(displayedPrice, auction.currency) : 'Verificación pendiente'}</Text>
       </View>
     </Pressable>
   );
@@ -298,7 +298,7 @@ function AuctionListItem({ auction, isFavorite, onPress, onToggleFavorite }) {
           {auction.title}
         </Text>
         <Text style={styles.listEstimate}>
-          {priceAvailable ? `Base ${formatMoney(auction.basePrice)}` : 'Precio reservado'}
+          {priceAvailable ? `Base ${formatMoney(auction.basePrice, auction.currency)}` : 'Precio reservado'}
         </Text>
       </View>
       <View style={styles.datePill}>
@@ -323,14 +323,14 @@ function AuctionListItem({ auction, isFavorite, onPress, onToggleFavorite }) {
   );
 }
 
-function formatMoney(value) {
+function formatMoney(value, currency = 'ARS') {
   if (value == null) return 'Reservado';
 
   const amount = Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   });
 
-  return `$ ${amount}`;
+  return `${currency || 'ARS'} $ ${amount}`;
 }
 
 function formatShortDate(date) {

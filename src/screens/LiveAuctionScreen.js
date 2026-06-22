@@ -258,6 +258,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
       setWinnerCelebration({
         amount: Number(recentWin.amount || 0),
         commission: Number(recentWin.commission || 0),
+        currency: detail.currency || 'ARS',
         itemTitle: recentWin.itemTitle || 'la pieza',
         paid: recentWin.paymentStatus === 'pagada',
         total: Number(recentWin.amount || 0) + Number(recentWin.commission || 0) + SHIPPING_COST
@@ -307,7 +308,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   }
 
   const bidButtonLabel = Number.isFinite(rules.typedAmount) && rules.typedAmount > 0
-    ? `Pujar ${formatMoney(rules.typedAmount)}`
+    ? `Pujar ${formatMoney(rules.typedAmount, auction?.currency)}`
     : 'Pujar';
   const finalized = auction.status === 'cerrada' || auction.closureStatus === 'finalizada';
   const counting = auction.closureStatus === 'en_cuenta' && !finalized;
@@ -394,7 +395,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
         <View style={styles.bidSurface}>
           <Text style={styles.panelLabel}>{Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Valor inicial'}</Text>
-          <Text style={styles.currentBid}>{formatMoney(rules.currentBid)}</Text>
+          <Text style={styles.currentBid}>{formatMoney(rules.currentBid, auction.currency)}</Text>
           <View style={[styles.timerBox, finalized && styles.timerBoxClosed]}>
             <MaterialCommunityIcons
               color={finalized ? '#73E6A2' : colors.primary}
@@ -475,9 +476,9 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           </View>
 
           <View style={styles.rangeRow}>
-            <Text style={styles.rangeText}>Min. {formatMoney(rules.minBid)}</Text>
+            <Text style={styles.rangeText}>Min. {formatMoney(rules.minBid, auction.currency)}</Text>
             <Text style={styles.rangeText}>
-              {rules.canBypassRange ? 'Rango flexible' : `Max. ${formatMoney(rules.maxBid)}`}
+              {rules.canBypassRange ? 'Rango flexible' : `Max. ${formatMoney(rules.maxBid, auction.currency)}`}
             </Text>
           </View>
           <Text style={styles.rangeHint}>
@@ -518,12 +519,12 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           {auction.bidFeed?.length ? (
             <View style={styles.feedList}>
               {auction.bidFeed.map((bid) => (
-                <FeedRow bid={bid} key={bid.id} />
+                <FeedRow bid={bid} currency={auction.currency} key={bid.id} />
               ))}
             </View>
           ) : (
             <View style={styles.emptyFeed}>
-              <Text style={styles.emptyFeedTitle}>Aun no hay pujas nuevas</Text>
+              <Text style={styles.emptyFeedTitle}>Aún no hay pujas nuevas</Text>
               <Text style={styles.emptyFeedText}>Tu oferta va a aparecer acá al confirmarse.</Text>
             </View>
           )}
@@ -559,8 +560,8 @@ function WinnerCelebration({ celebration, onClose }) {
           <Text style={styles.winnerItem}>{celebration.itemTitle}</Text>
           <Text style={styles.winnerText}>
             {celebration.paid
-              ? `Se debitó ${formatMoney(celebration.total)}: puja, comisión y envío incluidos.`
-              : `Ganaste la pieza. El total es ${formatMoney(celebration.total)} y quedó pendiente de cobro.`}
+              ? `Se debitó ${formatMoney(celebration.total, celebration.currency)}: puja, comisión y envío incluidos.`
+              : `Ganaste la pieza. El total es ${formatMoney(celebration.total, celebration.currency)} y quedó pendiente de cobro.`}
           </Text>
           <Pressable onPress={onClose} style={styles.winnerButton}>
             <Text style={styles.winnerButtonText}>Continuar</Text>
@@ -571,7 +572,7 @@ function WinnerCelebration({ celebration, onClose }) {
   );
 }
 
-function FeedRow({ bid }) {
+function FeedRow({ bid, currency }) {
   const leading = bid.winner === 'si';
 
   return (
@@ -587,7 +588,7 @@ function FeedRow({ bid }) {
           <Text style={styles.bidTime}>{formatTime(bid.createdAt)}</Text>
         </View>
       </View>
-      <Text style={styles.feedAmount}>{formatMoney(bid.amount)}</Text>
+      <Text style={styles.feedAmount}>{formatMoney(bid.amount, currency)}</Text>
     </View>
   );
 }
@@ -615,14 +616,14 @@ function getClosureCopy(auction) {
 
 function getFinalResultText(auction) {
   if (auction.closure?.reason === 'compra_empresa_sin_pujas') {
-    return `No se recibieron ofertas dentro del plazo. La empresa compra el objeto por el valor base de ${formatMoney(auction.basePrice)}.`;
+    return `No se recibieron ofertas dentro del plazo. La empresa compra el objeto por el valor base de ${formatMoney(auction.basePrice, auction.currency)}.`;
   }
   if (auction.closure?.winner?.isCurrentUser) {
     const amount = auction.closure.winner.amount;
     const total = Number(amount || 0) + Number(auction.commission || 0) + SHIPPING_COST;
-    return `Se registró la venta. Total a pagar: puja ${formatMoney(amount)}, comisión ${formatMoney(auction.commission)} y envío ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(total)}.`;
+    return `Se registró la venta. Total a pagar: puja ${formatMoney(amount, auction.currency)}, comisión ${formatMoney(auction.commission, auction.currency)} y envío ${formatMoney(SHIPPING_COST, auction.currency)}. Total ${formatMoney(total, auction.currency)}.`;
   }
-  return `${auction.closure?.winner?.bidderAlias ?? 'El ultimo postor'} se queda con la pieza por ${formatMoney(auction.closure?.winner?.amount ?? auction.currentBid)}.`;
+  return `${auction.closure?.winner?.bidderAlias ?? 'El ultimo postor'} se queda con la pieza por ${formatMoney(auction.closure?.winner?.amount ?? auction.currentBid, auction.currency)}.`;
 }
 
 function parseCurrency(value) {
@@ -635,8 +636,8 @@ function formatInputAmount(value) {
   });
 }
 
-function formatMoney(value) {
-  return `$ ${Number(value || 0).toLocaleString('es-AR', {
+function formatMoney(value, currency = 'ARS') {
+  return `${currency || 'ARS'} $ ${Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   })}`;
 }

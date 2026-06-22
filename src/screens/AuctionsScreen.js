@@ -172,7 +172,7 @@ function AuctionRow({ auction, isFavorite, onPress, onToggleFavorite }) {
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>{price == null ? 'Precio' : live ? (hasBid ? 'Puja actual' : 'Valor inicial') : 'Precio base'}</Text>
           <Text style={styles.price}>
-            {price == null ? 'Reservado' : formatMoney(price)}
+            {price == null ? 'Reservado' : formatMoney(price, auction.currency)}
           </Text>
         </View>
       </View>
@@ -195,10 +195,10 @@ function AuctionRow({ auction, isFavorite, onPress, onToggleFavorite }) {
   );
 }
 
-function formatMoney(value) {
+function formatMoney(value, currency = 'ARS') {
   if (value == null) return 'Reservado';
 
-  return `$ ${Number(value || 0).toLocaleString('es-AR', {
+  return `${currency || 'ARS'} $ ${Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   })}`;
 }

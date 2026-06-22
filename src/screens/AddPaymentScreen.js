@@ -152,7 +152,7 @@ export default function AddPaymentScreen({ onBack, onSaved, user }) {
         )}
 
         <View style={styles.commonFields}>
-          <Text style={styles.fieldLabel}>Moneda de garantia</Text>
+          <Text style={styles.fieldLabel}>Moneda de garantía</Text>
           <View style={styles.currencyTabs}>
             {['ARS', 'USD'].map((currency) => (
               <Pressable
@@ -617,6 +617,12 @@ const styles = StyleSheet.create({
   field: {
     flex: 1,
     marginBottom: 15
+  },
+  fieldLabel: {
+    color: colors.onSurface,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8
   },
   fieldHint: {
     color: colors.onSurfaceVariant,

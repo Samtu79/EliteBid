@@ -224,7 +224,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
                   </View>
                   <Text numberOfLines={2} style={styles.catalogDescription}>{item.description}</Text>
                   <Text style={styles.catalogPrice}>
-                    {item.basePrice == null ? 'Precio reservado para usuarios registrados' : `Base ${formatMoney(item.basePrice)}`}
+                    {item.basePrice == null ? 'Precio reservado para usuarios registrados' : `Base ${formatMoney(item.basePrice, auction.currency)}`}
                   </Text>
                   <ProductPhotoCarousel
                     fallbackUri={item.imageUrl || auction.imageUrl}
@@ -239,10 +239,10 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           </View>
 
           <View style={styles.infoGrid}>
-            <InfoBlock label="Valor inicial" value={formatMoney(auction.basePrice)} />
+            <InfoBlock label="Valor inicial" value={formatMoney(auction.basePrice, auction.currency)} />
             <InfoBlock
               label={Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Sin ofertas aún'}
-              value={Number(auction.currentBid || 0) > 0 ? formatMoney(auction.currentBid) : '-'}
+              value={Number(auction.currentBid || 0) > 0 ? formatMoney(auction.currentBid, auction.currency) : '-'}
             />
             <InfoBlock label="Fecha de inicio" value={formatDate(auction.date)} />
             <InfoBlock label="Hora de inicio" value={auction.time} />
@@ -283,7 +283,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
               ok={live}
               text={allItemsSold
                 ? 'Lote finalizado: no quedan productos disponibles para pujar.'
-                : live ? `Puja sugerida desde ${formatMoney(suggestedBid)}` : 'La sala abre en la fecha indicada'}
+                : live ? `Puja sugerida desde ${formatMoney(suggestedBid, auction.currency)}` : 'La sala abre en la fecha indicada'}
             /> : null}
           </View>
 
@@ -343,10 +343,10 @@ function RuleRow({ ok, text }) {
   );
 }
 
-function formatMoney(value) {
+function formatMoney(value, currency = 'ARS') {
   if (value == null) return 'Reservado';
 
-  return `$ ${Number(value || 0).toLocaleString('es-AR', {
+  return `${currency || 'ARS'} $ ${Number(value || 0).toLocaleString('es-AR', {
     maximumFractionDigits: 0
   })}`;
 }
