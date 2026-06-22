@@ -1,5 +1,4 @@
-param(
-  [int]$ApiPort = 3001,
+param(001,
   [int]$NgrokApiPort = 4040,
   [string]$EnvFile = ".env",
   [string]$ComposeService = "mysql"

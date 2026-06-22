@@ -48,7 +48,7 @@ async function seedDemoPenaltyAccounts() {
       [account.id, account.document, account.name, 'Cuenta interna de demostracion']
     );
     await run(
-      `INSERT INTO clientes (identificador, numero_pais, admitido, categoria, verificador)
+      `INSERT INTO clientes (identificador, numeroPais, admitido, categoria, verificador)
        VALUES (?, 32, 'si', ?, 2)
        ON DUPLICATE KEY UPDATE admitido = 'si', categoria = VALUES(categoria), verificador = 2`,
       [account.id, account.category]

@@ -168,7 +168,7 @@ async function cleanup(db) {
       [user.clienteId]
     );
     await db.query('DELETE FROM solicitudes_lotes WHERE cliente = ?', [user.clienteId]);
-    await db.query('DELETE FROM registro_de_subasta WHERE cliente = ?', [user.clienteId]);
+    await db.query('DELETE FROM registroDeSubasta WHERE cliente = ?', [user.clienteId]);
     await db.query(
       'DELETE pf FROM penalidad_falta_fondos pf JOIN penalidades p ON p.identificador = pf.penalidad WHERE p.cliente = ?',
       [user.clienteId]
@@ -394,7 +394,7 @@ async function addDemoBids(db, clienteId, { total = 2, wins = 0, amount = 250000
     `SELECT s.identificador AS auctionId, i.identificador AS itemId
      FROM subastas s
      JOIN catalogos c ON c.subasta = s.identificador
-     JOIN items_catalogo i ON i.catalogo = c.identificador
+     JOIN itemsCatalogo i ON i.catalogo = c.identificador
      ORDER BY s.identificador ASC, i.identificador ASC
      LIMIT ?`,
     [Math.max(total, 1)]
@@ -409,7 +409,7 @@ async function addDemoBids(db, clienteId, { total = 2, wins = 0, amount = 250000
     let assistantId = assistantRows[0]?.id;
     if (!assistantId) {
       const [result] = await db.query(
-        'INSERT INTO asistentes (numero_postor, cliente, subasta) VALUES (?, ?, ?)',
+        'INSERT INTO asistentes (numeroPostor, cliente, subasta) VALUES (?, ?, ?)',
         [800 + index + clienteId, clienteId, auction.auctionId]
       );
       assistantId = result.insertId;
@@ -576,8 +576,8 @@ async function seedDemoAuctions(db) {
   for (const auction of auctions) {
     await db.query(
       `INSERT INTO subastas (
-        identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidad_asistentes,
-        tiene_deposito, seguridad_propia, categoria, moneda, imagen_uri
+        identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidadAsistentes,
+        tieneDeposito, seguridadPropia, categoria, moneda, imagen_uri
       ) VALUES (?, ?, ?, ?, ?, 2, ?, 120, 'si', 'si', ?, ?, ?)
       ON DUPLICATE KEY UPDATE titulo = VALUES(titulo), fecha = VALUES(fecha), hora = VALUES(hora),
         estado = VALUES(estado), ubicacion = VALUES(ubicacion), categoria = VALUES(categoria),
@@ -606,23 +606,23 @@ async function seedDemoAuctions(db) {
       const itemId = auction.id * 10 + index + 1;
       await db.query(
         `INSERT INTO productos (
-          identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri
+          identificador, fecha, disponible, descripcionCatalogo, descripcionCompleta, revisor, duenio, seguro, imagen_uri
         ) VALUES (?, ?, 'si', ?, ?, 2, 3, NULL, ?)
         ON DUPLICATE KEY UPDATE fecha = VALUES(fecha), disponible = VALUES(disponible),
-          descripcion_catalogo = VALUES(descripcion_catalogo), descripcion_completa = VALUES(descripcion_completa),
+          descripcionCatalogo = VALUES(descripcionCatalogo), descripcionCompleta = VALUES(descripcionCompleta),
           imagen_uri = VALUES(imagen_uri)`,
         [productId, auction.date, product.title, `${product.title}. Fixture QA con procedencia y fotos completas.`, product.image]
       );
       await db.query(
-        `INSERT INTO items_catalogo (
-          identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual,
+        `INSERT INTO itemsCatalogo (
+          identificador, catalogo, orden_lote, producto, precioBase, comision, subastado, pujaActual,
           timer_inicio, timer_vencimiento, cierre_estado, cierre_motivo
         ) VALUES (?, ?, ?, ?, ?, ?, 'no', 0, NULL, NULL, 'esperando_puja', NULL)
         ON DUPLICATE KEY UPDATE catalogo = VALUES(catalogo), orden_lote = VALUES(orden_lote),
-          producto = VALUES(producto), precio_base = VALUES(precio_base), comision = VALUES(comision),
-          subastado = 'no', puja_actual = 0, timer_inicio = NULL, timer_vencimiento = NULL,
+          producto = VALUES(producto), precioBase = VALUES(precioBase), comision = VALUES(comision),
+          subastado = 'no', pujaActual = 0, timer_inicio = NULL, timer_vencimiento = NULL,
           cierre_estado = 'esperando_puja', cierre_motivo = NULL`,
-        [itemId, auction.id, index + 1, productId, product.basePrice, Number(product.basePrice) * 0.12]
+        [itemId, auction.id, index + 1, productId, product.basePrice, Number(product.basePrice) * 0.15]
       );
       for (let order = 1; order <= 6; order += 1) {
         const uri = `${product.image}${product.image.includes('?') ? '&' : '?'}qa_photo=${order}`;

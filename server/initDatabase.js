@@ -23,7 +23,18 @@ async function initDatabase() {
   await getPool().query(schema);
   await migrateSecuritySchema();
   await seedDatabase();
+  await normalizeActiveAuctionCommissions();
   await normalizeUnstartedLotItems();
+}
+
+async function normalizeActiveAuctionCommissions() {
+  await run(
+    `UPDATE itemsCatalogo i
+     JOIN catalogos c ON c.identificador = i.catalogo
+     JOIN subastas s ON s.identificador = c.subasta
+     SET i.comision = ROUND((CASE WHEN i.pujaActual > 0 THEN i.pujaActual ELSE i.precioBase END) * 0.15, 2)
+     WHERE s.estado <> 'cerrada' AND i.cierre_estado <> 'finalizada'`
+  );
 }
 
 async function normalizeUnstartedLotItems() {
@@ -868,7 +879,7 @@ async function seedAuction(auction) {
   await run(
     `INSERT IGNORE INTO itemsCatalogo (identificador, catalogo, orden_lote, producto, precioBase, comision, subastado, pujaActual)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.12, 'no', auction.currentBid || 0]
+    [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.15, 'no', auction.currentBid || 0]
   );
 
   const additionalLotItems = auction.extraItems?.length
@@ -898,7 +909,7 @@ async function seedAuction(auction) {
     await run(
       `INSERT IGNORE INTO itemsCatalogo (identificador, catalogo, orden_lote, producto, precioBase, comision, subastado, pujaActual)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [itemId, auction.id, index + 2, productId, item.basePrice, item.basePrice * 0.12, 'no', item.currentBid || 0]
+      [itemId, auction.id, index + 2, productId, item.basePrice, item.basePrice * 0.15, 'no', item.currentBid || 0]
     );
   }
 

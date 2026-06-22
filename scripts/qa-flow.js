@@ -1,4 +1,4 @@
-﻿const mysql = require('mysql2/promise');
+const mysql = require('mysql2/promise');
 
 require('dotenv').config();
 
@@ -620,13 +620,13 @@ async function cleanup(db, touched = {}) {
       await db.query(
         `DELETE f FROM fotos f
          JOIN productos p ON p.identificador = f.producto
-         JOIN items_catalogo i ON i.producto = p.identificador
+         JOIN itemsCatalogo i ON i.producto = p.identificador
          JOIN catalogos c ON c.identificador = i.catalogo
          WHERE c.subasta = ?`,
         [generated.auctionId]
       );
       await db.query(
-        `DELETE i FROM items_catalogo i
+        `DELETE i FROM itemsCatalogo i
          JOIN catalogos c ON c.identificador = i.catalogo
          WHERE c.subasta = ?`,
         [generated.auctionId]
@@ -634,7 +634,7 @@ async function cleanup(db, touched = {}) {
       await db.query('DELETE FROM catalogos WHERE subasta = ?', [generated.auctionId]);
       await db.query(
         `DELETE p FROM productos p
-         LEFT JOIN items_catalogo i ON i.producto = p.identificador
+         LEFT JOIN itemsCatalogo i ON i.producto = p.identificador
          WHERE p.duenio = ? AND i.identificador IS NULL`,
         [row.clienteId]
       );
@@ -645,7 +645,7 @@ async function cleanup(db, touched = {}) {
       [row.clienteId]
     );
     await db.query('DELETE FROM solicitudes_lotes WHERE cliente = ?', [row.clienteId]);
-    await db.query('DELETE FROM registro_de_subasta WHERE cliente = ?', [row.clienteId]);
+    await db.query('DELETE FROM registroDeSubasta WHERE cliente = ?', [row.clienteId]);
     await db.query(
       'DELETE pf FROM penalidad_falta_fondos pf JOIN penalidades p ON p.identificador = pf.penalidad WHERE p.cliente = ?',
       [row.clienteId]
@@ -673,8 +673,8 @@ async function cleanup(db, touched = {}) {
 
 async function restoreTouchedItem(db, touchedItem) {
   await db.query(
-    `UPDATE items_catalogo
-     SET puja_actual = ?, subastado = COALESCE(?, subastado),
+    `UPDATE itemsCatalogo
+     SET pujaActual = ?, subastado = COALESCE(?, subastado),
        timer_inicio = NULL, timer_vencimiento = NULL,
        cierre_estado = COALESCE(?, 'esperando_puja'), cierre_motivo = ?
      WHERE identificador = ?`,
@@ -690,21 +690,21 @@ async function restoreTouchedItem(db, touchedItem) {
 
 async function resetAuctionForQa(db, auctionId) {
   await db.query(
-    `DELETE r FROM registro_de_subasta r
+    `DELETE r FROM registroDeSubasta r
      WHERE r.subasta = ?`,
     [auctionId]
   );
   await db.query(
     `DELETE p FROM pujos p
-     JOIN items_catalogo i ON i.identificador = p.item
+     JOIN itemsCatalogo i ON i.identificador = p.item
      JOIN catalogos c ON c.identificador = i.catalogo
      WHERE c.subasta = ?`,
     [auctionId]
   );
   await db.query(
-    `UPDATE items_catalogo i
+    `UPDATE itemsCatalogo i
      JOIN catalogos c ON c.identificador = i.catalogo
-     SET i.puja_actual = 0,
+     SET i.pujaActual = 0,
        i.subastado = 'no',
        i.timer_inicio = NULL,
        i.timer_vencimiento = NULL,
@@ -1119,10 +1119,10 @@ async function main() {
     });
     const [goldAuctionRows] = await db.query(
       `SELECT s.identificador AS auctionId, s.estado AS auctionStatus, i.identificador AS itemId,
-        i.puja_actual AS currentBid, i.subastado AS subastado, s.moneda AS currency
+        i.pujaActual AS currentBid, i.subastado AS subastado, s.moneda AS currency
        FROM subastas s
        JOIN catalogos c ON c.subasta = s.identificador
-       JOIN items_catalogo i ON i.catalogo = c.identificador
+       JOIN itemsCatalogo i ON i.catalogo = c.identificador
        WHERE s.categoria = 'oro'
        ORDER BY s.identificador ASC, i.orden_lote ASC
        LIMIT 1`
@@ -1142,8 +1142,8 @@ async function main() {
     });
     await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [goldAuctionSeed.auctionId]);
     await db.query(
-      `UPDATE items_catalogo
-       SET puja_actual = 0, subastado = 'no', timer_inicio = NULL, timer_vencimiento = NULL,
+      `UPDATE itemsCatalogo
+       SET pujaActual = 0, subastado = 'no', timer_inicio = NULL, timer_vencimiento = NULL,
          cierre_estado = 'esperando_puja', cierre_motivo = NULL
        WHERE identificador = ?`,
       [goldAuctionSeed.itemId]
@@ -1269,7 +1269,7 @@ async function main() {
     await db.query(
       `UPDATE subastas s
        JOIN catalogos c ON c.subasta = s.identificador
-       JOIN items_catalogo i ON i.catalogo = c.identificador
+       JOIN itemsCatalogo i ON i.catalogo = c.identificador
        SET s.estado = 'cerrada', i.subastado = 'si', i.cierre_estado = 'finalizada', i.cierre_motivo = 'qa_cierre_total'
        WHERE s.identificador = ?`,
       [acceptedLot.generatedAuctionId]
@@ -1351,11 +1351,11 @@ async function main() {
 
     const [commonAuctionRows] = await db.query(
       `SELECT s.identificador AS auctionId, s.estado AS auctionStatus, i.identificador AS itemId,
-        i.puja_actual AS currentBid, i.subastado AS subastado,
+        i.pujaActual AS currentBid, i.subastado AS subastado,
         i.cierre_estado AS closureStatus, i.cierre_motivo AS closureReason
        FROM subastas s
        JOIN catalogos c ON c.subasta = s.identificador
-       JOIN items_catalogo i ON i.catalogo = c.identificador
+       JOIN itemsCatalogo i ON i.catalogo = c.identificador
        WHERE s.categoria = 'comun'
        ORDER BY CASE WHEN s.identificador = 90001 THEN 0 ELSE 1 END, s.identificador ASC, i.orden_lote ASC
        LIMIT 1`
@@ -1384,8 +1384,8 @@ async function main() {
     logOk('catalogo subasta-productos con precios y fotos');
 
     await db.query(
-      `UPDATE items_catalogo
-       SET puja_actual = 0, subastado = 'no', timer_inicio = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 3 MINUTE),
+      `UPDATE itemsCatalogo
+       SET pujaActual = 0, subastado = 'no', timer_inicio = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 3 MINUTE),
          timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND), cierre_estado = 'esperando_puja',
          cierre_motivo = NULL
        WHERE identificador = ?`,
@@ -1398,9 +1398,9 @@ async function main() {
     }
     const [companyReceiptRows] = await db.query(
       `SELECT r.cliente AS clienteId, r.importe AS amount, r.estado_pago AS paymentStatus
-       FROM registro_de_subasta r
+       FROM registroDeSubasta r
        JOIN catalogos c ON c.subasta = r.subasta
-       JOIN items_catalogo i ON i.catalogo = c.identificador AND i.producto = r.producto
+       JOIN itemsCatalogo i ON i.catalogo = c.identificador AND i.producto = r.producto
        WHERE i.identificador = ?
        LIMIT 1`,
       [registeredDetail.itemId]
@@ -1590,7 +1590,7 @@ async function main() {
     logOk('usuario A vuelve a superar la oferta');
 
     await db.query(
-      "UPDATE items_catalogo SET timer_vencimiento = UTC_TIMESTAMP() WHERE identificador = ?",
+      "UPDATE itemsCatalogo SET timer_vencimiento = UTC_TIMESTAMP() WHERE identificador = ?",
       [room.itemId]
     );
     await expectReject('lider no puede reabrir contador en 00:00', () =>
@@ -1661,10 +1661,10 @@ async function main() {
     });
     const [penaltyAuctionRows] = await db.query(
       `SELECT s.identificador AS auctionId, s.estado AS auctionStatus, i.identificador AS itemId,
-        i.puja_actual AS currentBid, i.subastado AS subastado
+        i.pujaActual AS currentBid, i.subastado AS subastado
        FROM subastas s
        JOIN catalogos c ON c.subasta = s.identificador
-       JOIN items_catalogo i ON i.catalogo = c.identificador
+       JOIN itemsCatalogo i ON i.catalogo = c.identificador
        WHERE s.categoria = 'comun' AND i.identificador <> ?
        ORDER BY s.identificador ASC, i.orden_lote ASC
        LIMIT 1`,
@@ -1685,8 +1685,8 @@ async function main() {
     });
     await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [penaltyAuctionSeed.auctionId]);
     await db.query(
-      `UPDATE items_catalogo
-       SET puja_actual = 0, subastado = 'no', timer_inicio = NULL, timer_vencimiento = NULL,
+      `UPDATE itemsCatalogo
+       SET pujaActual = 0, subastado = 'no', timer_inicio = NULL, timer_vencimiento = NULL,
          cierre_estado = 'esperando_puja', cierre_motivo = NULL
        WHERE identificador = ?`,
       [penaltyAuctionSeed.itemId]
@@ -1699,7 +1699,7 @@ async function main() {
       body: JSON.stringify({ clienteId: userPenalty.clienteId, amount: penaltyBidAmount })
     });
     await db.query(
-      "UPDATE items_catalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND) WHERE identificador = ?",
+      "UPDATE itemsCatalogo SET timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND) WHERE identificador = ?",
       [penaltyAuctionSeed.itemId]
     );
     await request(`/auctions/${penaltyAuctionSeed.auctionId}?clienteId=${userPenalty.clienteId}`, { token: userPenalty.sessionToken });
@@ -1715,10 +1715,10 @@ async function main() {
       throw new Error('La multa por falta de fondos no quedo activa con el 10 porciento');
     }
     await db.query(
-      `UPDATE registro_de_subasta r
+      `UPDATE registroDeSubasta r
        JOIN pujos p ON p.identificador = ?
        JOIN asistentes a ON a.identificador = p.asistente
-       JOIN items_catalogo i ON i.identificador = p.item
+       JOIN itemsCatalogo i ON i.identificador = p.item
        JOIN catalogos c ON c.identificador = i.catalogo
        SET r.creado_en = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 71 HOUR)
        WHERE r.cliente = a.cliente AND r.subasta = c.subasta AND r.producto = i.producto`,
@@ -1734,7 +1734,7 @@ async function main() {
     if (restrictedAccount.estado !== 'restringida') throw new Error('La cuenta con penalidad no quedo restringida');
     await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [activeCommon.id]);
     await db.query(
-      `UPDATE items_catalogo
+      `UPDATE itemsCatalogo
        SET subastado = 'no', timer_inicio = NULL, timer_vencimiento = NULL,
          cierre_estado = 'esperando_puja', cierre_motivo = NULL
        WHERE identificador = ?`,

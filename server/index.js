@@ -18,6 +18,7 @@ const DEMO_LIVE_AUCTION_IDS = [11, 12, 13];
 const DEMO_FIRST_BID_TIMER_SECONDS = 180;
 const COMPANY_CLIENT_ID = 4;
 const SHIPPING_COST = 25000;
+const BUYER_COMMISSION_RATE = 0.15;
 const MAX_GUARANTEE_AMOUNT = 999999999999.99;
 const DEFAULT_REVIEWER_ID = 2;
 const DEFAULT_AUCTIONEER_ID = 2;
@@ -1490,7 +1491,7 @@ async function settlePurchase(clienteId, bidId) {
   const purchase = await first(
     `SELECT p.identificador AS id, p.importe AS amount, s.identificador AS auctionId,
       prod.identificador AS productId, prod.duenio AS ownerId, i.identificador AS itemId,
-      i.comision AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
+      COALESCE(r.comision, i.comision) AS commission, p.medio_pago AS paymentMethodId, r.identificador AS receiptId,
       r.estado_pago AS paymentStatus, s.moneda AS currency
      FROM pujos p
      JOIN asistentes a ON a.identificador = p.asistente
@@ -2234,7 +2235,7 @@ async function settleExpiredAuctionTimers() {
 async function getRecentAuctionWin(auctionId, clienteId) {
   if (!clienteId) return null;
   return first(
-    `SELECT i.identificador AS itemId, p.importe AS amount, i.comision AS commission,
+    `SELECT i.identificador AS itemId, p.importe AS amount, COALESCE(r.comision, i.comision) AS commission,
       prod.descripcionCatalogo AS itemTitle, p.identificador AS bidId,
       r.estado_pago AS paymentStatus
      FROM pujos p
@@ -2313,7 +2314,8 @@ async function finalizeAuctionItem(itemId) {
   const amount = Number(lastBid?.amount ?? item.basePrice);
   const paymentMethodId = lastBid?.paymentMethodId ?? null;
   const reason = lastBid ? 'adjudicada_por_tiempo' : 'compra_empresa_sin_pujas';
-  const totalDue = amount + Number(item.commission || 0) + SHIPPING_COST;
+  const commission = calculateBuyerCommission(amount);
+  const totalDue = amount + commission + SHIPPING_COST;
   const paidAutomatically = lastBid
     ? await captureWinningPayment(buyerClientId, paymentMethodId, totalDue, item.currency)
     : false;
@@ -2338,22 +2340,22 @@ async function finalizeAuctionItem(itemId) {
     await run(
       `INSERT INTO registroDeSubasta (subasta, duenio, producto, cliente, medio_pago, importe, comision, estado_pago)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, item.commission, paymentStatus]
+      [item.auctionId, item.ownerId, item.productId, buyerClientId, paymentMethodId, amount, commission, paymentStatus]
     );
   } else if (lastBid) {
     await run(
       `UPDATE registroDeSubasta
        SET medio_pago = ?, importe = ?, comision = ?, estado_pago = ?
        WHERE identificador = ?`,
-      [paymentMethodId, amount, item.commission, paymentStatus, receipt.id]
+      [paymentMethodId, amount, commission, paymentStatus, receipt.id]
     );
   }
 
   await run(
     `UPDATE itemsCatalogo
-     SET subastado = ?, cierre_estado = 'finalizada', cierre_motivo = ?
+     SET subastado = ?, comision = ?, cierre_estado = 'finalizada', cierre_motivo = ?
      WHERE identificador = ?`,
-    ['si', reason, itemId]
+    ['si', commission, reason, itemId]
   );
   await ensureActiveAuctionItem(item.auctionId);
 
@@ -2432,10 +2434,10 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   ]);
   await run(
     `UPDATE itemsCatalogo
-     SET pujaActual = ?, timer_inicio = UTC_TIMESTAMP(), timer_vencimiento = ?,
+     SET pujaActual = ?, comision = ?, timer_inicio = UTC_TIMESTAMP(), timer_vencimiento = ?,
        cierre_estado = 'en_cuenta', cierre_motivo = NULL
      WHERE identificador = ?`,
-    [amount, toMysqlDateTime(new Date(Date.now() + BID_TIMER_SECONDS * 1000)), detail.itemId]
+    [amount, calculateBuyerCommission(amount), toMysqlDateTime(new Date(Date.now() + BID_TIMER_SECONDS * 1000)), detail.itemId]
   );
   await refreshClientCategory(clienteId);
 
@@ -2780,7 +2782,7 @@ async function getUserNotifications(viewer) {
     }
 
     const latestWonPurchase = await first(
-      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission,
+      `SELECT p.identificador AS bidId, p.importe AS amount, COALESCE(r.comision, i.comision) AS commission,
         s.identificador AS auctionId, s.titulo AS title, r.estado_pago AS paymentStatus,
         r.creado_en AS createdAt
        FROM pujos p
@@ -2810,7 +2812,7 @@ async function getUserNotifications(viewer) {
     }
 
     const expiringPurchase = await first(
-      `SELECT p.identificador AS bidId, p.importe AS amount, i.comision AS commission,
+      `SELECT p.identificador AS bidId, p.importe AS amount, COALESCE(r.comision, i.comision) AS commission,
         s.titulo AS title, r.creado_en AS createdAt,
         DATE_ADD(r.creado_en, INTERVAL 72 HOUR) AS dueAt,
         GREATEST(0, TIMESTAMPDIFF(HOUR, UTC_TIMESTAMP(), DATE_ADD(r.creado_en, INTERVAL 72 HOUR))) AS hoursRemaining
@@ -2945,6 +2947,10 @@ async function getUserNotifications(viewer) {
   }));
 }
 
+function calculateBuyerCommission(amount) {
+  return Math.round(Number(amount || 0) * BUYER_COMMISSION_RATE * 100) / 100;
+}
+
 async function markNotificationsRead(clienteId, notificationIds) {
   const ids = [...new Set(notificationIds.map((id) => String(id || '')).filter(Boolean))];
   for (const notificationId of ids) {
@@ -3045,10 +3051,10 @@ async function getUserPurchases(clienteId) {
     `SELECT p.identificador AS id, p.importe AS amount, p.creado_en AS createdAt,
       p.ganador AS winner, s.identificador AS auctionId, s.titulo AS title,
       s.moneda AS currency, prod.identificador AS productId, prod.duenio AS ownerId,
-      i.identificador AS itemId, i.comision AS commission, p.medio_pago AS paymentMethodId,
+      i.identificador AS itemId, COALESCE(r.comision, i.comision) AS commission, p.medio_pago AS paymentMethodId,
       r.identificador AS receiptId, r.medio_pago AS receiptPaymentMethodId, r.estado_pago AS receiptPaymentStatus,
       r.direccion_entrega AS deliveryAddress,
-      ? AS shippingCost, (p.importe + i.comision + ?) AS totalDue,
+      ? AS shippingCost, (p.importe + COALESCE(r.comision, i.comision) + ?) AS totalDue,
       COALESCE(r.estado_pago, 'pendiente') AS paymentStatus,
       CASE
         WHEN COALESCE(r.estado_pago, 'pendiente') <> 'pagada' THEN 'pago_pendiente'
@@ -4113,8 +4119,7 @@ function sanitizeLotReviewApproval(payload) {
     ['auctionDate', 'Indica la fecha de subasta.'],
     ['auctionTime', 'Indica la hora de subasta.'],
     ['auctionLocation', 'Indica el lugar de subasta.'],
-    ['basePrice', 'Indica el valor base.'],
-    ['commission', 'Indica la comision.']
+    ['basePrice', 'Indica el valor base.']
   ];
 
   for (const [key, message] of required) {
@@ -4135,16 +4140,15 @@ function sanitizeLotReviewApproval(payload) {
   }
 
   const basePrice = parseMoney(payload.basePrice, 'Indica un valor base valido.');
-  const commission = parseMoney(payload.commission, 'Indica una comision valida.');
   if (basePrice <= 0) throw new Error('El valor base debe ser mayor a cero.');
-  if (commission <= 0) throw new Error('La comision debe ser mayor a cero.');
 
   return {
     auctionDate,
     auctionLocation: normalizeAddress(payload.auctionLocation),
     auctionTime,
     basePrice,
-    commission,
+    // La comisión del comprador está fijada por el contrato en 15%.
+    commission: calculateBuyerCommission(basePrice),
     insuranceCompany: normalizeTitleText(payload.insuranceCompany, 'Indica una aseguradora valida.'),
     insurancePolicy: normalizeLotText(payload.insurancePolicy, 'Indica una poliza valida.', 80, 3),
     storageLocation: normalizeAddress(payload.storageLocation)
