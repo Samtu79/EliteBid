@@ -312,7 +312,6 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const waitingForFirstBid = auction.closureStatus === 'esperando_puja' && !finalized && secondsRemaining > 0;
   const technicalClosing = !finalized && secondsRemaining === 0 && (counting || auction.closureStatus === 'esperando_puja');
   const bidDisabled = sending || finalized || !selectedPaymentId || leadingActive;
-  const selectedPayment = payments.find((payment) => Number(payment.id) === Number(selectedPaymentId));
 
   return (
     <View style={styles.container}>
@@ -358,16 +357,17 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           <LinearGradient
             colors={['rgba(20, 5, 43, 0.08)', 'rgba(20, 5, 43, 0.32)', 'rgba(20, 5, 43, 0.95)']}
             locations={[0, 0.48, 1]}
+            pointerEvents="none"
             style={StyleSheet.absoluteFill}
           />
           {stagePhotoUris.length > 1 ? (
-            <View style={styles.stagePhotoBadge}>
+            <View pointerEvents="none" style={styles.stagePhotoBadge}>
               <MaterialCommunityIcons color={colors.onSurface} name="image-multiple-outline" size={13} />
               <Text style={styles.stagePhotoBadgeText}>{stagePhotoIndex + 1}/{stagePhotoUris.length}</Text>
             </View>
           ) : null}
 
-          <View style={styles.stageCopy}>
+          <View pointerEvents="none" style={styles.stageCopy}>
             <Text style={styles.stageMeta}>
               Objeto {auction.lotPosition || 1} de {auction.lotItemCount || 1}
             </Text>
@@ -464,19 +464,6 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
             <Pressable disabled={sending || finalized || leadingActive} onPress={() => adjustBid(1)} style={styles.stepButton}>
               <MaterialCommunityIcons color={colors.onPrimaryFixed} name="plus" size={24} />
             </Pressable>
-          </View>
-
-          <View style={styles.paymentPanel}>
-            <Text style={styles.paymentLabel}>Medio de pago para esta puja</Text>
-            {selectedPayment ? (
-              <View style={[styles.paymentChip, styles.paymentChipSelected]}>
-                <MaterialCommunityIcons color={colors.onPrimaryFixed} name={getPaymentIcon(selectedPayment.type)} size={16} />
-                <Text style={[styles.paymentChipText, styles.paymentChipTextSelected]}>{getPaymentLabel(selectedPayment)}</Text>
-              </View>
-            ) : (
-              <Text style={styles.noPaymentText}>No hay medios verificados.</Text>
-            )}
-            <Text style={styles.paymentLockedText}>Elegido en Pagos. Para cambiarlo, hacelo antes de entrar a una subasta.</Text>
           </View>
 
           <View style={styles.rangeRow}>
@@ -628,20 +615,6 @@ function getFinalResultText(auction) {
     return `Se registro la venta. Total a pagar: puja ${formatMoney(amount)}, comision ${formatMoney(auction.commission)} y envio ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(total)}.`;
   }
   return `${auction.closure?.winner?.bidderAlias ?? 'El ultimo postor'} se queda con la pieza por ${formatMoney(auction.closure?.winner?.amount ?? auction.currentBid)}.`;
-}
-
-function getPaymentIcon(type) {
-  if (type === 'tarjeta') return 'credit-card-outline';
-  if (type === 'cheque') return 'file-document-check-outline';
-  return 'bank-outline';
-}
-
-function getPaymentLabel(payment) {
-  const detail = payment.parsedDetail || {};
-  const currency = payment.currency ? ` ${payment.currency}` : '';
-  if (payment.type === 'tarjeta') return `${detail.brand || 'Tarjeta'} ${detail.cardNumberLast4 || ''}${currency}`.trim();
-  if (payment.type === 'cheque') return `Cheque ${detail.checkNumberLast4 || ''}${currency}`.trim();
-  return `${detail.bank || 'Cuenta'} ${detail.cbuLast4 || detail.alias || ''}${currency}`.trim();
 }
 
 function parseCurrency(value) {
@@ -923,56 +896,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
     textTransform: 'uppercase'
-  },
-  noPaymentText: {
-    color: colors.error,
-    fontSize: 12,
-    fontWeight: '800',
-    paddingVertical: 8
-  },
-  paymentChip: {
-    alignItems: 'center',
-    borderColor: 'rgba(204, 193, 255, 0.22)',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    minHeight: 36,
-    paddingHorizontal: 12
-  },
-  paymentChipSelected: {
-    backgroundColor: colors.primaryContainer,
-    borderColor: colors.primaryContainer
-  },
-  paymentChipText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '900'
-  },
-  paymentChipTextSelected: {
-    color: colors.onPrimaryFixed
-  },
-  paymentLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: 9,
-    textTransform: 'uppercase'
-  },
-  paymentLockedText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 16,
-    marginTop: 8
-  },
-  paymentOptions: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingRight: 6
-  },
-  paymentPanel: {
-    marginTop: 12
   },
   rangeRow: {
     flexDirection: 'row',
