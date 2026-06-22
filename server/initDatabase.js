@@ -230,12 +230,62 @@ async function addColumnIfMissing(tableName, columnName, ddl) {
   }
 }
 
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatTime(date) {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+async function resetAuctionSeedData() {
+  await run('CREATE TEMPORARY TABLE IF NOT EXISTS productos_subastas_cleanup (identificador INT PRIMARY KEY)');
+  await run('DELETE FROM productos_subastas_cleanup');
+  await run('INSERT IGNORE INTO productos_subastas_cleanup SELECT DISTINCT producto FROM items_catalogo');
+  await run(
+    `UPDATE solicitudes_lotes
+     SET estado = CASE WHEN estado = 'en_subasta' THEN 'pendiente' ELSE estado END,
+       subasta_generada = NULL,
+       catalogo_generado = NULL
+     WHERE subasta_generada IS NOT NULL OR catalogo_generado IS NOT NULL`
+  );
+  await run(
+    `DELETE pf FROM penalidad_falta_fondos pf
+     JOIN pujos p ON p.identificador = pf.puja`
+  );
+  await run('DELETE FROM registro_de_subasta');
+  await run('DELETE FROM favoritos');
+  await run('DELETE FROM pujos');
+  await run('DELETE FROM asistentes');
+  await run('DELETE FROM items_catalogo');
+  await run('DELETE FROM catalogos');
+  await run('DELETE FROM subastas');
+  await run(
+    `DELETE f FROM fotos f
+     JOIN productos_subastas_cleanup p ON p.identificador = f.producto`
+  );
+  await run(
+    `DELETE pr FROM productos pr
+     JOIN productos_subastas_cleanup p ON p.identificador = pr.identificador`
+  );
+  await run('ALTER TABLE subastas AUTO_INCREMENT = 1');
+  await run('ALTER TABLE catalogos AUTO_INCREMENT = 1');
+  await run('ALTER TABLE items_catalogo AUTO_INCREMENT = 1');
+  await run('ALTER TABLE pujos AUTO_INCREMENT = 1');
+  await run('ALTER TABLE asistentes AUTO_INCREMENT = 1');
+  await run('ALTER TABLE registro_de_subasta AUTO_INCREMENT = 1');
+}
+
 async function seedDatabase() {
-  const dateInDays = (days) => {
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    return date.toISOString().slice(0, 10);
-  };
   await run(
     `INSERT IGNORE INTO paises (numero, nombre, nombre_corto, capital, nacionalidad, idiomas)
      VALUES
@@ -394,298 +444,288 @@ async function seedDatabase() {
     }
   }
 
-  await seedAuction({
-    id: 1,
-    title: 'Patek Philippe Grand Complications',
-    date: '2026-06-06',
-    time: '21:30',
-    status: 'abierta',
-    category: 'platino',
-    location: 'Salon Nocturne, Puerto Madero',
-    image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=900&q=80',
-    product: 'Reloj mecanico suizo con calendario perpetuo y fase lunar.',
-    basePrice: 380000,
-    currentBid: 450000
-  });
-  await seedAuction({
-    id: 2,
-    title: 'Composicion Abstracta, 1968',
-    date: '2026-06-06',
-    time: '19:00',
-    status: 'abierta',
-    category: 'oro',
-    location: 'Galeria Central',
-    image: 'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?auto=format&fit=crop&w=900&q=80',
-    product: 'Obra expresionista con procedencia documentada y marco original.',
-    basePrice: 9500000,
-    currentBid: 12500000
-  });
-  await seedAuction({
-    id: 3,
-    title: 'Porsche 911 Carrera 1973',
-    date: dateInDays(7),
-    time: '20:30',
-    status: 'programada',
-    category: 'oro',
-    location: 'Hangar Norte',
-    image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',
-    product: 'Coupe clasico restaurado, matching numbers y dossier tecnico.',
-    basePrice: 80000000,
-    currentBid: 0
-  });
-  await seedAuction({
-    id: 4,
-    title: 'Lote Numismatico Rio de la Plata',
-    date: '2026-06-06',
-    time: '18:30',
-    status: 'abierta',
-    category: 'comun',
-    location: 'Sala Federal, CABA',
-    image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
-    product: 'Conjunto de monedas argentinas y medallas con catalogacion basica.',
-    basePrice: 120000,
-    currentBid: 132000,
-    extraItems: [
-      {
-        product: 'Moneda de 8 escudos de oro, Rio de la Plata, 1828.',
-        image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
-        basePrice: 185000
-      },
-      {
-        product: 'Medalla conmemorativa de plata, Exposicion Nacional 1882.',
-        image: 'https://images.unsplash.com/photo-1644424235476-295f24d503d9?auto=format&fit=crop&w=900&q=80',
-        basePrice: 95000
-      },
-      {
-        product: 'Billete argentino de coleccion, serie historica sin circular.',
-        image: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?auto=format&fit=crop&w=900&q=80',
-        basePrice: 70000
-      }
-    ]
-  });
-  await seedAuction({
-    id: 5,
-    title: 'Camara Leica M3 con Optica Summicron',
-    date: '2026-06-06',
-    time: '20:00',
-    status: 'abierta',
-    category: 'especial',
-    location: 'Galeria Central',
-    image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80',
-    product: 'Camara analogica Leica M3 revisada, con lente Summicron 50mm.',
-    basePrice: 780000,
-    currentBid: 842000
-  });
-  await seedAuction({
-    id: 6,
-    title: 'Juego de Te Ingles de 18 Piezas',
-    date: '2026-06-06',
-    time: '18:00',
-    status: 'abierta',
-    category: 'plata',
-    location: 'Salon Nocturne, Puerto Madero',
-    image: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=900&q=80',
-    product: 'Juego de te en porcelana inglesa con servicio completo de 18 piezas.',
-    basePrice: 1450000,
-    currentBid: 1610000
-  });
-  await seedAuction({
-    id: 7,
-    title: 'Coleccion Inicial de Diseno Argentino',
-    date: dateInDays(10),
-    time: '19:30',
-    status: 'programada',
-    category: 'comun',
-    location: 'Espacio Retiro',
-    image: 'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80',
-    product: 'Piezas de diseno argentino contemporaneo para nuevos postores.',
-    basePrice: 220000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Silla BKF original restaurada con cuero natural.',
-        image: 'https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?auto=format&fit=crop&w=900&q=80',
-        basePrice: 180000
-      },
-      {
-        product: 'Lampara de mesa industrial de autor argentino.',
-        image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
-        basePrice: 95000
-      }
-    ]
-  });
-  await seedAuction({
-    id: 8,
-    title: 'Coleccion de Arte Contemporaneo Federal',
-    date: dateInDays(16),
-    time: '18:45',
-    status: 'programada',
-    category: 'plata',
-    location: 'Museo Puerto Norte',
-    image: 'https://images.unsplash.com/photo-1531913764164-f85c52e6e654?auto=format&fit=crop&w=900&q=80',
-    product: 'Obra mixta sobre tela de artista argentino emergente.',
-    basePrice: 1800000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Escultura en bronce patinado, serie limitada.',
-        image: 'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=900&q=80',
-        basePrice: 2400000
-      },
-      {
-        product: 'Diptico fotografico firmado y certificado.',
-        image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80',
-        basePrice: 950000
-      }
-    ]
-  });
-  await seedAuction({
-    id: 9,
-    title: 'Joyeria Antigua y Relojeria de Autor',
-    date: dateInDays(32),
-    time: '20:15',
-    status: 'programada',
-    category: 'oro',
-    location: 'Salon Alvear',
-    image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=900&q=80',
-    product: 'Anillo art deco en oro blanco con piedra central certificada.',
-    basePrice: 22000000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Reloj de vestir mecanico con caja de oro.',
-        image: 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=80',
-        basePrice: 34000000
-      },
-      {
-        product: 'Collar antiguo con perlas naturales y broche original.',
-        image: 'https://images.unsplash.com/photo-1611085583191-a3b181a88401?auto=format&fit=crop&w=900&q=80',
-        basePrice: 18000000
-      }
-    ]
-  });
-  await seedAuction({
-    id: 10,
-    title: 'Objetos Historicos del Siglo XIX',
-    date: dateInDays(50),
-    time: '19:00',
-    status: 'programada',
-    category: 'comun',
-    location: 'Archivo Central',
-    image: 'https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=900&q=80',
-    product: 'Documento historico encuadernado con certificacion de procedencia.',
-    basePrice: 320000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Mapa litografiado de Buenos Aires con marco de epoca.',
-        image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=900&q=80',
-        basePrice: 280000
-      },
-      {
-        product: 'Set de plumas y tintero de escritorio, circa 1890.',
-        image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80',
-        basePrice: 160000
-      }
-    ]
-  });
+  await resetAuctionSeedData();
+  const now = new Date();
+  const schedule = (minutesFromNow) => {
+    const startsAt = addMinutes(now, minutesFromNow);
+    return {
+      date: formatDate(startsAt),
+      time: formatTime(startsAt)
+    };
+  };
+  const auctions = [
+    {
+      id: 11,
+      title: 'Sala en vivo: Porsche 911 Targa 1972',
+      ...schedule(0),
+      durationMinutes: 55,
+      status: 'abierta',
+      category: 'platino',
+      currency: 'USD',
+      location: 'Hangar Norte, San Fernando',
+      image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',
+      product: 'Porsche 911 Targa 1972 restaurado, matching numbers y dossier tecnico completo.',
+      basePrice: 92000,
+      extraItems: [
+        {
+          product: 'Set de herramientas original Porsche con estuche de epoca.',
+          image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80',
+          basePrice: 3200
+        },
+        {
+          product: 'Volante deportivo de madera para coupe clasica.',
+          image: 'https://images.unsplash.com/photo-1525609004556-c46c7d6cf023?auto=format&fit=crop&w=900&q=80',
+          basePrice: 1800
+        }
+      ]
+    },
+    {
+      id: 12,
+      title: 'Sala en vivo: Arte abstracto latinoamericano',
+      ...schedule(18),
+      durationMinutes: 65,
+      status: 'abierta',
+      category: 'oro',
+      currency: 'ARS',
+      location: 'Galeria Norte, Recoleta',
+      image: 'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?auto=format&fit=crop&w=900&q=80',
+      product: 'Oleo abstracto de gran formato con certificado de procedencia.',
+      basePrice: 9800000,
+      extraItems: [
+        {
+          product: 'Escultura en bronce patinado, serie numerada.',
+          image: 'https://images.unsplash.com/photo-1577083552431-6e5fd01988f7?auto=format&fit=crop&w=900&q=80',
+          basePrice: 3200000
+        },
+        {
+          product: 'Grabado firmado con marco de madera original.',
+          image: 'https://images.unsplash.com/photo-1561214115-f2f134cc4912?auto=format&fit=crop&w=900&q=80',
+          basePrice: 850000
+        }
+      ]
+    },
+    {
+      id: 13,
+      title: 'Sala en vivo: Relojeria suiza de coleccion',
+      ...schedule(36),
+      durationMinutes: 70,
+      status: 'abierta',
+      category: 'plata',
+      currency: 'ARS',
+      location: 'Salon Nocturne, Puerto Madero',
+      image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=900&q=80',
+      product: 'Reloj mecanico suizo con calendario perpetuo y caja de oro.',
+      basePrice: 4800000,
+      extraItems: [
+        {
+          product: 'Cronografo de acero con taquimetro y estuche original.',
+          image: 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=80',
+          basePrice: 2150000
+        },
+        {
+          product: 'Reloj de vestir automatico con esfera champagne.',
+          image: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=80',
+          basePrice: 1750000
+        }
+      ]
+    },
+    {
+      id: 1,
+      title: 'Diseno argentino contemporaneo',
+      ...schedule(70),
+      status: 'programada',
+      category: 'comun',
+      currency: 'ARS',
+      location: 'Espacio Retiro',
+      image: 'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80',
+      product: 'Sillon de autor argentino con estructura de madera maciza.',
+      basePrice: 360000,
+      extraItems: [
+        {
+          product: 'Mesa auxiliar de nogal con tapa circular.',
+          image: 'https://images.unsplash.com/photo-1532323544230-7191fd51bc1b?auto=format&fit=crop&w=900&q=80',
+          basePrice: 180000
+        },
+        {
+          product: 'Lampara industrial restaurada con pantalla metalica.',
+          image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
+          basePrice: 145000
+        }
+      ]
+    },
+    {
+      id: 2,
+      title: 'Fotografia de autor y camaras analogicas',
+      ...schedule(105),
+      status: 'programada',
+      category: 'especial',
+      currency: 'ARS',
+      location: 'Galeria Central',
+      image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80',
+      product: 'Camara Leica M3 revisada con lente Summicron 50mm.',
+      basePrice: 1250000,
+      extraItems: [
+        {
+          product: 'Copia fotografica pigmentaria firmada y numerada.',
+          image: 'https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=900&q=80',
+          basePrice: 420000
+        },
+        {
+          product: 'Camara reflex analogica Nikon con lente 35mm.',
+          image: 'https://images.unsplash.com/photo-1452780212940-6f5c0d14d848?auto=format&fit=crop&w=900&q=80',
+          basePrice: 310000
+        }
+      ]
+    },
+    {
+      id: 3,
+      title: 'Numismatica del Rio de la Plata',
+      ...schedule(140),
+      status: 'programada',
+      category: 'comun',
+      currency: 'ARS',
+      location: 'Sala Federal, CABA',
+      image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=900&q=80',
+      product: 'Coleccion de monedas argentinas certificadas en capsulas individuales.',
+      basePrice: 240000,
+      extraItems: [
+        {
+          product: 'Medalla conmemorativa de plata de exposicion nacional.',
+          image: 'https://images.unsplash.com/photo-1644424235476-295f24d503d9?auto=format&fit=crop&w=900&q=80',
+          basePrice: 115000
+        },
+        {
+          product: 'Billete argentino de coleccion en estado sin circular.',
+          image: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?auto=format&fit=crop&w=900&q=80',
+          basePrice: 98000
+        }
+      ]
+    },
+    {
+      id: 4,
+      title: 'Joyas art deco certificadas',
+      ...schedule(175),
+      status: 'programada',
+      category: 'oro',
+      currency: 'USD',
+      location: 'Salon Alvear',
+      image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=900&q=80',
+      product: 'Anillo art deco en oro blanco con piedra central certificada.',
+      basePrice: 14500,
+      extraItems: [
+        {
+          product: 'Collar antiguo con perlas naturales y broche original.',
+          image: 'https://images.unsplash.com/photo-1611085583191-a3b181a88401?auto=format&fit=crop&w=900&q=80',
+          basePrice: 9800
+        },
+        {
+          product: 'Pulsera de oro amarillo con eslabones articulados.',
+          image: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=900&q=80',
+          basePrice: 7600
+        }
+      ]
+    },
+    {
+      id: 5,
+      title: 'Instrumentos musicales de coleccion',
+      ...schedule(210),
+      status: 'programada',
+      category: 'plata',
+      currency: 'ARS',
+      location: 'Auditorio San Telmo',
+      image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?auto=format&fit=crop&w=900&q=80',
+      product: 'Guitarra acustica de luthier con tapa de abeto macizo.',
+      basePrice: 890000,
+      extraItems: [
+        {
+          product: 'Violin aleman de estudio avanzado con estuche rigido.',
+          image: 'https://images.unsplash.com/photo-1465821185615-20b3c2fbf41b?auto=format&fit=crop&w=900&q=80',
+          basePrice: 760000
+        },
+        {
+          product: 'Saxofon alto vintage revisado por tecnico especializado.',
+          image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=900&q=80',
+          basePrice: 680000
+        }
+      ]
+    },
+    {
+      id: 6,
+      title: 'Porcelana europea y vajilla fina',
+      ...schedule(240),
+      status: 'programada',
+      category: 'especial',
+      currency: 'ARS',
+      location: 'Salon Dorrego',
+      image: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=900&q=80',
+      product: 'Juego de te ingles de 18 piezas en porcelana esmaltada.',
+      basePrice: 620000,
+      extraItems: [
+        {
+          product: 'Centro de mesa de porcelana francesa pintado a mano.',
+          image: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=900&q=80',
+          basePrice: 280000
+        },
+        {
+          product: 'Par de tazas de coleccion con borde dorado.',
+          image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=900&q=80',
+          basePrice: 155000
+        }
+      ]
+    },
+    {
+      id: 7,
+      title: 'Libros raros y documentos historicos',
+      ...schedule(270),
+      status: 'programada',
+      category: 'comun',
+      currency: 'ARS',
+      location: 'Archivo Central',
+      image: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=900&q=80',
+      product: 'Primera edicion encuadernada con anotaciones marginales.',
+      basePrice: 410000,
+      extraItems: [
+        {
+          product: 'Mapa litografiado de Buenos Aires con marco de epoca.',
+          image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=900&q=80',
+          basePrice: 280000
+        },
+        {
+          product: 'Set de plumas y tintero de escritorio, circa 1890.',
+          image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80',
+          basePrice: 160000
+        }
+      ]
+    },
+    {
+      id: 8,
+      title: 'Automovilismo historico y memorabilia',
+      ...schedule(292),
+      status: 'programada',
+      category: 'oro',
+      currency: 'ARS',
+      location: 'Club de Automoviles Clasicos',
+      image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=900&q=80',
+      product: 'Casco de competicion vintage con grafica original.',
+      basePrice: 540000,
+      extraItems: [
+        {
+          product: 'Chaqueta de piloto de cuero con insignias bordadas.',
+          image: 'https://images.unsplash.com/photo-1520975682031-a9c72fdf6d2d?auto=format&fit=crop&w=900&q=80',
+          basePrice: 390000
+        },
+        {
+          product: 'Placa esmaltada de automovilismo argentino.',
+          image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80',
+          basePrice: 250000
+        }
+      ]
+    }
+  ];
 
-  // Salas de demostracion: se muestran como las tres unicas salas en vivo del catalogo.
-  await run("UPDATE subastas SET estado = 'programada' WHERE identificador BETWEEN 1 AND 10 AND estado = 'abierta'");
-  const demoDate = new Date().toISOString().slice(0, 10);
-
-  await seedAuction({
-    id: 11,
-    title: 'Sala en vivo: Diseño moderno de autor',
-    date: demoDate,
-    time: '18:00',
-    status: 'abierta',
-    category: 'especial',
-    location: 'Sala Diseño, Puerto Madero',
-    image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80',
-    product: 'Sillón de diseño escandinavo restaurado, tapizado en bouclé natural.',
-    basePrice: 380000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Lámpara de pie cromada de la década de 1970, con pantalla original.',
-        image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80',
-        basePrice: 195000
-      },
-      {
-        product: 'Mesa auxiliar de nogal con tapa circular y terminación artesanal.',
-        image: 'https://images.unsplash.com/photo-1532323544230-7191fd51bc1b?auto=format&fit=crop&w=900&q=80',
-        basePrice: 225000
-      },
-      {
-        product: 'Silla de cuero y hierro de autor argentino, edición limitada.',
-        image: 'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80',
-        basePrice: 160000
-      }
-    ]
-  });
-
-  await seedAuction({
-    id: 12,
-    title: 'Sala en vivo: Arte y fotografía federal',
-    date: demoDate,
-    time: '18:15',
-    status: 'abierta',
-    category: 'oro',
-    location: 'Galería Norte, Recoleta',
-    image: 'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?auto=format&fit=crop&w=900&q=80',
-    product: 'Pintura abstracta de gran formato, óleo sobre tela, firmada al dorso.',
-    basePrice: 980000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Escultura contemporánea en bronce patinado, serie numerada.',
-        image: 'https://images.unsplash.com/photo-1577083552431-6e5fd01988f7?auto=format&fit=crop&w=900&q=80',
-        basePrice: 720000
-      },
-      {
-        product: 'Fotografía urbana firmada, copia pigmentaria con certificado.',
-        image: 'https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=900&q=80',
-        basePrice: 340000
-      },
-      {
-        product: 'Grabado argentino de colección con marco de madera original.',
-        image: 'https://images.unsplash.com/photo-1561214115-f2f134cc4912?auto=format&fit=crop&w=900&q=80',
-        basePrice: 265000
-      }
-    ]
-  });
-
-  await seedAuction({
-    id: 13,
-    title: 'Sala en vivo: Automovilismo y relojería',
-    date: demoDate,
-    time: '18:30',
-    status: 'abierta',
-    category: 'platino',
-    location: 'Hangar de Colección, San Fernando',
-    image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',
-    product: 'Coupé deportivo clásico restaurado, con documentación y dossier técnico.',
-    basePrice: 18500000,
-    currentBid: 0,
-    extraItems: [
-      {
-        product: 'Casco de competición vintage, gráfico original y visor reemplazable.',
-        image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=900&q=80',
-        basePrice: 380000
-      },
-      {
-        product: 'Cronógrafo mecánico suizo con taquímetro y caja de acero.',
-        image: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=80',
-        basePrice: 1250000
-      },
-      {
-        product: 'Volante deportivo de madera, pieza de colección para automóvil clásico.',
-        image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80',
-        basePrice: 450000
-      }
-    ]
-  });
+  for (const auction of auctions) {
+    await seedAuction(auction);
+  }
 
   await run(
     `INSERT IGNORE INTO penalidades (identificador, cliente, titulo, descripcion, importe, estado, vencimiento)
@@ -705,7 +745,12 @@ async function seedDatabase() {
 async function seedAuction(auction) {
   await run(
     `INSERT IGNORE INTO subastas (identificador, titulo, fecha, hora, estado, subastador, ubicacion, capacidad_asistentes, tiene_deposito, seguridad_propia, categoria, moneda, imagen_uri)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE titulo = VALUES(titulo), fecha = VALUES(fecha), hora = VALUES(hora),
+       estado = VALUES(estado), subastador = VALUES(subastador), ubicacion = VALUES(ubicacion),
+       capacidad_asistentes = VALUES(capacidad_asistentes), tiene_deposito = VALUES(tiene_deposito),
+       seguridad_propia = VALUES(seguridad_propia), categoria = VALUES(categoria),
+       moneda = VALUES(moneda), imagen_uri = VALUES(imagen_uri)`,
     [
       auction.id,
       auction.title,
@@ -718,25 +763,33 @@ async function seedAuction(auction) {
       'si',
       'si',
       auction.category,
-      'ARS',
+      auction.currency || 'ARS',
       auction.image
     ]
   );
   await run(
     `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE fecha = VALUES(fecha), disponible = VALUES(disponible),
+       descripcion_catalogo = VALUES(descripcion_catalogo), descripcion_completa = VALUES(descripcion_completa),
+       revisor = VALUES(revisor), duenio = VALUES(duenio), seguro = VALUES(seguro), imagen_uri = VALUES(imagen_uri)`,
     [auction.id, auction.date, 'si', auction.product, auction.product, 2, 3, null, auction.image]
   );
   await seedProductPhotos(auction.id, auction.image);
   await run(
     `INSERT IGNORE INTO catalogos (identificador, descripcion, subasta, responsable)
-     VALUES (?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), subasta = VALUES(subasta),
+       responsable = VALUES(responsable)`,
     [auction.id, `Catalogo ${auction.title}`, auction.id, 2]
   );
   await run(
     `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.12, 'no', 0]
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE catalogo = VALUES(catalogo), orden_lote = VALUES(orden_lote),
+       producto = VALUES(producto), precio_base = VALUES(precio_base), comision = VALUES(comision),
+       subastado = VALUES(subastado), puja_actual = VALUES(puja_actual)`,
+    [auction.id, auction.id, 1, auction.id, auction.basePrice, auction.basePrice * 0.12, 'no', auction.currentBid || 0]
   );
 
   const additionalLotItems = auction.extraItems?.length
@@ -759,14 +812,32 @@ async function seedAuction(auction) {
     const itemId = auction.id * 100 + index + 1;
     await run(
       `INSERT IGNORE INTO productos (identificador, fecha, disponible, descripcion_catalogo, descripcion_completa, revisor, duenio, seguro, imagen_uri)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE fecha = VALUES(fecha), disponible = VALUES(disponible),
+         descripcion_catalogo = VALUES(descripcion_catalogo), descripcion_completa = VALUES(descripcion_completa),
+         revisor = VALUES(revisor), duenio = VALUES(duenio), seguro = VALUES(seguro), imagen_uri = VALUES(imagen_uri)`,
       [productId, auction.date, 'si', item.product, item.product, 2, 3, null, item.image || auction.image]
     );
     await seedProductPhotos(productId, item.image || auction.image);
     await run(
       `INSERT IGNORE INTO items_catalogo (identificador, catalogo, orden_lote, producto, precio_base, comision, subastado, puja_actual)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE catalogo = VALUES(catalogo), orden_lote = VALUES(orden_lote),
+         producto = VALUES(producto), precio_base = VALUES(precio_base), comision = VALUES(comision),
+         subastado = VALUES(subastado), puja_actual = VALUES(puja_actual)`,
       [itemId, auction.id, index + 2, productId, item.basePrice, item.basePrice * 0.12, 'no', item.currentBid || 0]
+    );
+  }
+
+  if (auction.status === 'abierta') {
+    await run(
+      `UPDATE items_catalogo
+       SET timer_inicio = UTC_TIMESTAMP(),
+         timer_vencimiento = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE),
+         cierre_estado = 'esperando_puja',
+         cierre_motivo = NULL
+       WHERE catalogo = ? AND orden_lote = 1`,
+      [auction.durationMinutes || 60, auction.id]
     );
   }
 }
