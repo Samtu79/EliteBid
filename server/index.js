@@ -2205,7 +2205,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   const maxBid = currentBid + basePrice * 0.2;
 
   if (amount <= currentBid) throw new Error(`El monto debe superar la puja actual de ${formatMoney(currentBid)}.`);
-  if (hasBidRangeLimit && amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
+  if (amount < minBid) throw new Error(`El monto debe ser al menos ${formatMoney(minBid)}.`);
   if (hasBidRangeLimit && amount > maxBid) {
     throw new Error(`Para categorias comun, especial y plata, el monto no puede superar ${formatMoney(maxBid)}.`);
   }
@@ -2240,7 +2240,7 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
   return {
     auction: await getAuctionDetail(auctionId, clienteId),
     bid: { id: result.insertId, amount },
-    bounds: { min: hasBidRangeLimit ? minBid : currentBid + 1, max: hasBidRangeLimit ? maxBid : null }
+    bounds: { min: minBid, max: hasBidRangeLimit ? maxBid : null }
   };
 }
 

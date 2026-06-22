@@ -143,7 +143,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
     const basePrice = Number(auction.basePrice || 0);
     const bidStep = Math.max(100, Math.ceil((basePrice * 0.01) / 100) * 100);
     const hasBidRangeLimit = BID_RANGE_LIMIT_CATEGORIES.has(String(auction.category || '').toLowerCase());
-    const minBid = hasBidRangeLimit ? currentBid + basePrice * 0.01 : currentBid + 1;
+    const minBid = currentBid + basePrice * 0.01;
     const maxBid = currentBid + basePrice * 0.2;
 
     return {
@@ -467,11 +467,11 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               {rules.canBypassRange ? 'Rango flexible' : `Max. ${formatMoney(rules.maxBid)}`}
             </Text>
           </View>
-          {rules.hasBidRangeLimit ? (
-            <Text style={styles.rangeHint}>
-              Limites para comun, especial y plata: ultima oferta + 1% a 20% del valor base.
-            </Text>
-          ) : null}
+          <Text style={styles.rangeHint}>
+            {rules.hasBidRangeLimit
+              ? 'Incremento minimo: 1% del valor base. Comun, especial y plata tienen un maximo de 20%.'
+              : 'Incremento minimo: 1% del valor base. Esta categoria no tiene maximo de oferta.'}
+          </Text>
 
           <Pressable
             disabled={bidDisabled}
