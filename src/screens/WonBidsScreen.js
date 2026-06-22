@@ -19,6 +19,7 @@ import BottomNav, { bottomNavHeight } from '../components/BottomNav';
 import { colors, radii } from '../theme';
 
 export default function WonBidsScreen({ onBack, onNavigate, user }) {
+  const [activeView, setActiveView] = useState('won');
   const [addresses, setAddresses] = useState({});
   const [loading, setLoading] = useState(true);
   const [purchases, setPurchases] = useState([]);
@@ -113,7 +114,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
 
   const completedPurchases = purchases.filter(isCompletedPurchase);
   const pendingPurchases = purchases.filter((purchase) => !isCompletedPurchase(purchase));
-  const purchaseGroups = [
+  const statusGroups = [
     {
       id: 'pending',
       title: 'Pasos pendientes',
@@ -127,6 +128,14 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
       purchases: completedPurchases
     }
   ];
+  const purchaseGroups = activeView === 'status'
+    ? statusGroups
+    : [{
+      id: 'won',
+      title: 'Piezas adjudicadas',
+      description: 'Tus productos ganados. Completá el pago o el domicilio cuando corresponda.',
+      purchases
+    }];
 
   return (
     <View style={styles.container}>
@@ -154,8 +163,17 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Productos ganados</Text>
-            <Text style={styles.subtitle}>Revisa el pago, carga tu domicilio cuando puedas y segui el estado de cada entrega.</Text>
+            <Text style={styles.title}>{activeView === 'won' ? 'Productos ganados' : 'Estado de mis ganados'}</Text>
+            <Text style={styles.subtitle}>
+              {activeView === 'won'
+                ? 'Revisa tus piezas adjudicadas y completá los datos de entrega cuando puedas.'
+                : 'Seguimiento de pagos y entregas de todos tus productos ganados.'}
+            </Text>
+          </View>
+
+          <View style={styles.switcher}>
+            <ModeButton active={activeView === 'won'} icon="package-variant-closed-check" label="Ganados" onPress={() => setActiveView('won')} />
+            <ModeButton active={activeView === 'status'} icon="clipboard-list" label="Estado" onPress={() => setActiveView('status')} />
           </View>
 
           {purchases.length === 0 ? (
@@ -292,6 +310,15 @@ function Amount({ label, value }) {
       <Text style={styles.amountLabel}>{label}</Text>
       <Text style={styles.amountValue}>{value}</Text>
     </View>
+  );
+}
+
+function ModeButton({ active, icon, label, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
+      <MaterialCommunityIcons color={active ? colors.onPrimaryFixed : colors.onSurfaceVariant} name={icon} size={18} />
+      <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -458,6 +485,30 @@ const styles = StyleSheet.create({
   list: {
     gap: 16
   },
+  modeButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(147, 143, 156, 0.28)',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 7,
+    height: 42,
+    justifyContent: 'center'
+  },
+  modeButtonActive: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryContainer
+  },
+  modeButtonText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  modeButtonTextActive: {
+    color: colors.onPrimaryFixed
+  },
   purchaseSection: {
     gap: 10
   },
@@ -527,6 +578,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
     marginTop: 8
+  },
+  switcher: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 22
   },
   title: {
     color: colors.onSurface,
