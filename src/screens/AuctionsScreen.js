@@ -97,10 +97,10 @@ export default function AuctionsScreen({ onBack, onNavigate, onOpenAuctionDetail
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Catalogo conectado</Text>
+          <Text style={styles.eyebrow}>Catálogo conectado</Text>
           <Text style={styles.title}>Elegir sala, ver detalle y pujar</Text>
           <Text style={styles.subtitle}>
-            Listado con estado, categoria, precio base y acceso a la sala de pujas.
+            Listado con estado, categoría, precio base y acceso a la sala de pujas.
           </Text>
         </View>
 

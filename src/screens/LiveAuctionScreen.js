@@ -117,7 +117,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         if (!pollingWarningShownRef.current) {
           pollingWarningShownRef.current = true;
           setToast({
-            message: 'Estamos reconectando la sala. La informacion se actualizara enseguida.',
+            message: 'Estamos reconectando la sala. La información se actualizará enseguida.',
             tone: 'danger'
           });
         }
@@ -196,10 +196,10 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
         throw new Error('Selecciona un medio de pago verificado para pujar.');
       }
       if (leadingActive) {
-        throw new Error('Ya vas primero. No podes salir de la sala hasta que te superen o cierre el contador.');
+        throw new Error('Ya vas primero. No podés salir de la sala hasta que te superen o cierre el contador.');
       }
       if (auction?.timerExpiresAt && secondsRemaining <= 0 && ['esperando_puja', 'en_cuenta'].includes(auction?.closureStatus)) {
-        throw new Error('El contador llego a 00:00. Estamos cerrando la pieza, espera el siguiente producto del lote.');
+        throw new Error('El contador llegó a 00:00. Estamos cerrando la pieza, esperá el siguiente producto del lote.');
       }
 
       const result = await placeBid(user.clienteId, auctionId, parseCurrency(amount), selectedPaymentId);
@@ -218,7 +218,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
   function showLeadingLock() {
     setToast({
-      message: 'Vas primero: no podes salir de la sala hasta que te superen o ganes la pieza.',
+      message: 'Vas primero: no podés salir de la sala hasta que te superen o ganes la pieza.',
       tone: 'danger'
     });
   }
@@ -406,7 +406,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
                 {finalized
                   ? 'Lote finalizado'
                   : technicalClosing
-                    ? 'Cierre tecnico: procesando ofertas'
+                    ? 'Cierre técnico: procesando ofertas'
                   : counting
                     ? 'Cierra si nadie mejora en'
                     : waitingForFirstBid
@@ -435,7 +435,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           {auction.currency === 'USD' ? (
             <View style={styles.currencyNotice}>
               <MaterialCommunityIcons color={colors.primary} name="currency-usd" size={17} />
-              <Text style={styles.currencyNoticeText}>Subasta en dolares: requiere medio de pago USD verificado.</Text>
+              <Text style={styles.currencyNoticeText}>Subasta en dólares: requiere medio de pago USD verificado.</Text>
             </View>
           ) : null}
 
@@ -482,8 +482,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           </View>
           <Text style={styles.rangeHint}>
             {rules.hasBidRangeLimit
-              ? 'Incremento minimo: 1% del valor base. Comun, especial y plata tienen un maximo de 20%.'
-              : 'Incremento minimo: 1% del valor base. Esta categoria no tiene maximo de oferta.'}
+              ? 'Incremento mínimo: 1% del valor base. Común, especial y plata tienen un máximo de 20%.'
+              : 'Incremento mínimo: 1% del valor base. Esta categoría no tiene máximo de oferta.'}
           </Text>
 
           <Pressable
@@ -502,7 +502,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
 
           <Pressable onPress={() => guardRoomExit(onBack)} style={[styles.watchButton, leadingActive && styles.watchButtonLocked]}>
             <Text style={[styles.watchButtonText, leadingActive && styles.watchButtonTextLocked]}>
-              {leadingActive ? 'No podes salir mientras lideras' : 'Solo ver subasta'}
+              {leadingActive ? 'No podés salir mientras liderás' : 'Solo ver subasta'}
             </Text>
           </Pressable>
 
@@ -524,7 +524,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
           ) : (
             <View style={styles.emptyFeed}>
               <Text style={styles.emptyFeedTitle}>Aun no hay pujas nuevas</Text>
-              <Text style={styles.emptyFeedText}>Tu oferta va a aparecer aca al confirmarse.</Text>
+              <Text style={styles.emptyFeedText}>Tu oferta va a aparecer acá al confirmarse.</Text>
             </View>
           )}
         </View>
@@ -559,8 +559,8 @@ function WinnerCelebration({ celebration, onClose }) {
           <Text style={styles.winnerItem}>{celebration.itemTitle}</Text>
           <Text style={styles.winnerText}>
             {celebration.paid
-              ? `Se debito ${formatMoney(celebration.total)}: puja, comision y envio incluidos.`
-              : `Ganaste la pieza. El total es ${formatMoney(celebration.total)} y quedo pendiente de cobro.`}
+              ? `Se debitó ${formatMoney(celebration.total)}: puja, comisión y envío incluidos.`
+              : `Ganaste la pieza. El total es ${formatMoney(celebration.total)} y quedó pendiente de cobro.`}
           </Text>
           <Pressable onPress={onClose} style={styles.winnerButton}>
             <Text style={styles.winnerButtonText}>Continuar</Text>
@@ -620,7 +620,7 @@ function getFinalResultText(auction) {
   if (auction.closure?.winner?.isCurrentUser) {
     const amount = auction.closure.winner.amount;
     const total = Number(amount || 0) + Number(auction.commission || 0) + SHIPPING_COST;
-    return `Se registro la venta. Total a pagar: puja ${formatMoney(amount)}, comision ${formatMoney(auction.commission)} y envio ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(total)}.`;
+    return `Se registró la venta. Total a pagar: puja ${formatMoney(amount)}, comisión ${formatMoney(auction.commission)} y envío ${formatMoney(SHIPPING_COST)}. Total ${formatMoney(total)}.`;
   }
   return `${auction.closure?.winner?.bidderAlias ?? 'El ultimo postor'} se queda con la pieza por ${formatMoney(auction.closure?.winner?.amount ?? auction.currentBid)}.`;
 }

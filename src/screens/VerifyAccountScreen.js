@@ -19,12 +19,12 @@ export default function VerifyAccountScreen({ onContinueAsGuest, onVerified, use
           </View>
           <Text style={styles.eyebrow}>Verificacion de email</Text>
           <Text style={styles.title}>
-            {emailSent ? 'Te enviamos un codigo' : 'Codigo pendiente'}
+            {emailSent ? 'Te enviamos un código' : 'Código pendiente'}
           </Text>
           <Text style={styles.copy}>
             {emailSent
-              ? 'Ingresalo para verificar que el email te pertenece y crear tu contrasena. La aceptacion de la cuenta se informa despues en otro mail.'
-              : 'No pudimos enviar el mail todavia. Revisa la configuracion SMTP o toca reenviar codigo.'}
+              ? 'Ingresalo para verificar que el email te pertenece y crear tu contraseña. La aceptación de la cuenta se informa después en otro mail.'
+              : 'No pudimos enviar el mail todavía. Revisá la configuración SMTP o tocá reenviar código.'}
           </Text>
           <View style={styles.mailPill}>
             <MaterialCommunityIcons color={colors.onPrimaryFixed} name="email-outline" size={16} />

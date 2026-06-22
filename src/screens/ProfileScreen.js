@@ -314,8 +314,8 @@ export default function ProfileScreen({
           </View>
           <Text style={styles.lockedCopy}>
             {guest
-              ? 'Cuenta invitada: confirma el codigo de un solo uso para modificar datos, agregar pagos y participar.'
-              : 'Nombre, apellido y documento estan bloqueados por verificacion de identidad.'}
+              ? 'Cuenta invitada: confirmá el código de un solo uso para modificar datos, agregar pagos y participar.'
+              : 'Nombre, apellido y documento están bloqueados por verificación de identidad.'}
           </Text>
 
           {!guest && error ? <Text style={styles.error}>{error}</Text> : null}
@@ -372,7 +372,7 @@ export default function ProfileScreen({
           </View>
           <View style={styles.logoutCopy}>
             <Text style={styles.logoutTitle}>Cerrar Sesion</Text>
-            <Text style={styles.logoutText}>Finalizar sesion en este dispositivo</Text>
+            <Text style={styles.logoutText}>Finalizar sesión en este dispositivo</Text>
           </View>
           <MaterialCommunityIcons color={colors.outline} name="chevron-right" size={24} />
         </Pressable>
@@ -449,18 +449,18 @@ function CategoryModal({ loading, onClose, summary, visible }) {
             </Pressable>
           </View>
           <Text style={styles.modalCopy}>
-            {currentRule?.description ?? 'La categoria define en que subastas podes participar.'}
+            {currentRule?.description ?? 'La categoría define en qué subastas podés participar.'}
           </Text>
 
           {loading ? (
             <View style={styles.categoryLoading}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={styles.modalCopy}>Cargando progreso de categoria...</Text>
+              <Text style={styles.modalCopy}>Cargando progreso de categoría...</Text>
             </View>
           ) : nextRule ? (
             <>
               <View style={styles.nextCategoryBox}>
-                <Text style={styles.nextCategoryLabel}>Proxima categoria</Text>
+                <Text style={styles.nextCategoryLabel}>Próxima categoría</Text>
                 <Text style={styles.nextCategoryTitle}>{nextRule.label}</Text>
                 <Text style={styles.nextCategoryText}>{nextRule.description}</Text>
               </View>
@@ -475,7 +475,7 @@ function CategoryModal({ loading, onClose, summary, visible }) {
             <View style={styles.nextCategoryBox}>
               <Text style={styles.nextCategoryLabel}>Categoria maxima</Text>
               <Text style={styles.nextCategoryTitle}>Platino</Text>
-              <Text style={styles.nextCategoryText}>Ya estas en el rango mas alto disponible para participar.</Text>
+              <Text style={styles.nextCategoryText}>Ya estás en el rango más alto disponible para participar.</Text>
             </View>
           )}
         </View>

@@ -43,8 +43,8 @@ export default function VerificationPanel({
       const result = await resendVerificationEmail(email);
       setFeedback(
         result.verificationEmailSent
-          ? 'Te reenviamos el codigo de un solo uso.'
-          : 'No pudimos reenviar el codigo. Revisa SMTP, app password o el puerto 465.'
+          ? 'Te reenviamos el código de un solo uso.'
+          : 'No pudimos reenviar el código. Revisá SMTP, app password o el puerto 465.'
       );
     } catch (resendError) {
       setFeedback('', resendError.message);
@@ -57,23 +57,23 @@ export default function VerificationPanel({
     setFeedback('');
 
     if (!form.code.trim()) {
-      setFeedback('', 'Ingresa el codigo de un solo uso que recibiste por mail.');
+      setFeedback('', 'Ingresá el código de un solo uso que recibiste por mail.');
       return;
     }
     if (form.code.length !== 6) {
-      setFeedback('', 'El codigo debe tener 6 digitos.');
+      setFeedback('', 'El código debe tener 6 dígitos.');
       return;
     }
     if (!form.password.trim()) {
-      setFeedback('', 'Ingresa una nueva contrasena.');
+      setFeedback('', 'Ingresá una nueva contraseña.');
       return;
     }
     if (!form.confirmPassword.trim()) {
-      setFeedback('', 'Confirma tu nueva contrasena.');
+      setFeedback('', 'Confirmá tu nueva contraseña.');
       return;
     }
     if (!canSubmit) {
-      setFeedback('', 'Revisa los requisitos de la contrasena antes de confirmar.');
+      setFeedback('', 'Revisá los requisitos de la contraseña antes de confirmar.');
       return;
     }
 
@@ -87,7 +87,7 @@ export default function VerificationPanel({
         confirmPassword: form.confirmPassword
       });
       setForm({ code: '', password: '', confirmPassword: '' });
-      setFeedback('Email verificado. Ya podes agregar medios de pago y participar.');
+      setFeedback('Email verificado. Ya podés agregar medios de pago y participar.');
       onVerified(user);
     } catch (verificationError) {
       setFeedback('', verificationError.message);
@@ -110,24 +110,24 @@ export default function VerificationPanel({
           </View>
           <View style={styles.copy}>
             <Text style={styles.title}>Email pendiente</Text>
-            <Text style={styles.text}>Revisa tu mail, ingresa el codigo de un solo uso y crea tu contrasena.</Text>
+            <Text style={styles.text}>Revisá tu mail, ingresá el código de un solo uso y creá tu contraseña.</Text>
           </View>
         </View>
       ) : null}
 
       <Field
         keyboardType="numeric"
-        label="Codigo de un solo uso"
+        label="Código de un solo uso"
         maxLength={6}
         onChangeText={(value) => updateField('code', value)}
         value={form.code}
       />
       <Field
-        label="Nueva contrasena"
+        label="Nueva contraseña"
         onChangeText={(value) => updateField('password', value)}
         rightAccessory={(
           <Pressable
-            accessibilityLabel={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+            accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             onPress={() => setShowPassword((current) => !current)}
             style={styles.eyeButton}
           >
@@ -147,7 +147,7 @@ export default function VerificationPanel({
         ))}
       </View>
       <Field
-        label="Confirmar contrasena"
+        label="Confirmar contraseña"
         onChangeText={(value) => updateField('confirmPassword', value)}
         rightAccessory={(
           <Pressable
@@ -169,7 +169,7 @@ export default function VerificationPanel({
 
       <View style={styles.actions}>
         <Pressable disabled={resending} onPress={resendCode} style={styles.secondaryButton}>
-          {resending ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>Reenviar codigo</Text>}
+          {resending ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>Reenviar código</Text>}
         </Pressable>
         <Pressable
           disabled={submitting}

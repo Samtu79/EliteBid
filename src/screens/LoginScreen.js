@@ -47,11 +47,11 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
     setErrorDialog('');
 
     if (!identifier.trim()) {
-      setErrorDialog('Ingresa tu correo o documento para iniciar sesion.');
+      setErrorDialog('Ingresá tu correo o documento para iniciar sesión.');
       return;
     }
     if (!password.trim()) {
-      setErrorDialog('Ingresa tu clave o codigo de verificacion.');
+      setErrorDialog('Ingresá tu clave o código de verificación.');
       return;
     }
 
@@ -92,9 +92,9 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
         </View>
 
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Iniciar sesion</Text>
+          <Text style={styles.panelTitle}>Iniciar sesión</Text>
           <Text style={styles.panelCopy}>
-            Ingresa con tu clave usando mail o documento. Si todavia no tenes cuenta, podes explorar el catalogo como invitado.
+            Ingresá con tu clave usando mail o documento. Si todavía no tenés cuenta, podés explorar el catálogo como invitado.
           </Text>
 
           <View style={styles.fieldGroup}>
@@ -116,7 +116,7 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Clave o codigo</Text>
+            <Text style={styles.label}>Clave o código</Text>
             <View style={styles.inputWrapWithAccessory}>
               <TextInput
                 autoCapitalize="none"
@@ -124,7 +124,7 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
                 autoCorrect={false}
                 importantForAutofill="no"
                 onChangeText={setPassword}
-                placeholder="Clave o codigo de 6 digitos"
+                placeholder="Clave o código de 6 dígitos"
                 placeholderTextColor="rgba(201, 196, 211, 0.55)"
                 ref={passwordInputRef}
                 secureTextEntry={!showPassword}
@@ -134,7 +134,7 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
                 value={password}
               />
               <Pressable
-                accessibilityLabel={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 onPress={() => setShowPassword((current) => !current)}
                 style={styles.eyeButton}
               >
@@ -153,8 +153,8 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
                 <MaterialCommunityIcons color={colors.primary} name="lock-question" size={18} />
               </View>
               <View style={styles.assistCopy}>
-                <Text style={styles.assistTitle}>Olvide mi contrasena</Text>
-                <Text style={styles.assistText}>Recibi un codigo por mail para cambiarla.</Text>
+                <Text style={styles.assistTitle}>Olvidé mi contraseña</Text>
+                <Text style={styles.assistText}>Recibí un código por mail para cambiarla.</Text>
               </View>
               <MaterialCommunityIcons color={colors.onSurfaceVariant} name="chevron-right" size={20} />
             </Pressable>
@@ -164,7 +164,7 @@ export default function LoginScreen({ onForgotPassword, onGuestBrowse, onLogin, 
                 <MaterialCommunityIcons color={colors.primary} name="email-sync-outline" size={18} />
               </View>
               <View style={styles.assistCopy}>
-                <Text style={styles.assistTitle}>Reenviar codigo de email</Text>
+                <Text style={styles.assistTitle}>Reenviar código de email</Text>
                 <Text style={styles.assistText}>Verifica tu correo para terminar el alta.</Text>
               </View>
               <MaterialCommunityIcons color={colors.onSurfaceVariant} name="chevron-right" size={20} />

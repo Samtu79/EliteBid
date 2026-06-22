@@ -93,7 +93,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
   async function requestPolicyUpgrade(lot) {
     try {
       const result = await requestInsuranceUpgrade(lot.id);
-      setToast({ message: result.mensaje || 'Solicitud de aumento de poliza enviada.', tone: 'success' });
+      setToast({ message: result.mensaje || 'Solicitud de aumento de póliza enviada.', tone: 'success' });
     } catch (error) {
       setToast({ message: error.message, tone: 'danger' });
     }
@@ -186,7 +186,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
     if (!permission.granted) {
       setErrorDialog(
         source === 'camera'
-          ? 'Necesitamos permiso para usar la camara del dispositivo.'
+          ? 'Necesitamos permiso para usar la cámara del dispositivo.'
           : 'Necesitamos permiso para seleccionar fotos del dispositivo.'
       );
       return;
@@ -228,7 +228,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
   function validateForm() {
     const required = [
       ['title', 'Ingresa el nombre de la venta.'],
-      ['legalOrigin', 'Indica como podes acreditar el origen licito.'],
+      ['legalOrigin', 'Indicá cómo podés acreditar el origen lícito.'],
       ['payoutBank', 'Ingresa el banco de la cuenta de cobro.'],
       ['payoutAccountHolder', 'Ingresa el titular de la cuenta de cobro.'],
       ['payoutReference', 'Ingresa CBU, CVU, IBAN o alias de cobro.']
@@ -243,7 +243,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
       const productNumber = index + 1;
       const requiredItemFields = [
         ['title', `Ingresa el nombre del producto ${productNumber}.`],
-        ['itemType', `Ingresa la categoria del producto ${productNumber}.`],
+        ['itemType', `Ingresá la categoría del producto ${productNumber}.`],
         ['description', `Describe el producto ${productNumber}.`],
         ['condition', `Indica el estado de conservacion del producto ${productNumber}.`],
         ['history', `Agrega datos relevantes del producto ${productNumber}.`]
@@ -267,7 +267,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
       return 'Debes declarar que el bien te pertenece y no tiene impedimentos.';
     }
     if (!form.returnChargeAccepted) {
-      return 'Debes aceptar la devolucion con cargo si la empresa no acepta el bien.';
+      return 'Debés aceptar la devolución con cargo si la empresa no acepta el bien.';
     }
 
     return '';
@@ -293,7 +293,7 @@ export default function PurchasesScreen({ onBack, onNavigate, user }) {
       setForm(createInitialForm());
       setExpandedItemIndex(0);
       setActiveView('status');
-      setToast({ message: 'Lote cargado. Quedo pendiente de habilitacion.', tone: 'success' });
+      setToast({ message: 'Lote cargado. Quedó pendiente de habilitación.', tone: 'success' });
     } catch (error) {
       setErrorDialog(error.message);
     } finally {
@@ -442,7 +442,7 @@ function LotForm({ expandedItemIndex, form, onAddItem, onPickPhoto, onRemoveItem
       />
       <CheckRow
         checked={form.returnChargeAccepted}
-        label="Acepto que, si la empresa no acepta el bien enviado, la devolucion queda a mi cargo."
+        label="Acepto que, si la empresa no acepta el bien enviado, la devolución queda a mi cargo."
         onPress={() => updateField('returnChargeAccepted', !form.returnChargeAccepted)}
       />
 
@@ -569,7 +569,7 @@ function LotStatusList({ loading, lots, onInsuranceUpgrade, onRefresh }) {
         <MaterialCommunityIcons color={colors.primary} name="package-variant-closed" size={44} />
         <Text style={styles.emptyTitle}>Todavia no cargaste ventas</Text>
         <Text style={styles.emptyText}>
-          Cuando envies un producto o lote a revision, vas a ver aca si esta pendiente, en inspeccion o aceptado.
+          Cuando envíes un producto o lote a revisión, vas a ver acá si está pendiente, en inspección o aceptado.
         </Text>
         <Pressable onPress={onRefresh} style={styles.emptyButton}>
           <Text style={styles.emptyButtonText}>Actualizar</Text>
@@ -631,7 +631,7 @@ function LotCard({ lot, onInsuranceUpgrade }) {
         {canRequestInsuranceUpgrade ? (
           <Pressable onPress={() => onInsuranceUpgrade?.(lot)} style={styles.insuranceButton}>
             <MaterialCommunityIcons color={colors.onPrimaryFixed} name="shield-plus-outline" size={16} />
-            <Text style={styles.insuranceButtonText}>Solicitar aumento de poliza</Text>
+            <Text style={styles.insuranceButtonText}>Solicitar aumento de póliza</Text>
           </Pressable>
         ) : null}
       </View>
@@ -651,7 +651,7 @@ function getDisplayPhotoUri(uri) {
 
 function StatusDetail({ lot }) {
   if (lot.status === 'rechazado') {
-    return <Text style={styles.statusDetail}>{lot.rejectionReason || 'La empresa informara el motivo del rechazo.'}</Text>;
+    return <Text style={styles.statusDetail}>{lot.rejectionReason || 'La empresa informará el motivo del rechazo.'}</Text>;
   }
 
   if (lot.status === 'aceptado') {
@@ -671,10 +671,10 @@ function StatusDetail({ lot }) {
   }
 
   if (lot.status === 'en_inspeccion') {
-    return <Text style={styles.statusDetail}>La empresa esta revisando el bien y su documentacion.</Text>;
+    return <Text style={styles.statusDetail}>La empresa está revisando el bien y su documentación.</Text>;
   }
 
-  return <Text style={styles.statusDetail}>Quedo pendiente de habilitacion para una futura subasta.</Text>;
+  return <Text style={styles.statusDetail}>Quedó pendiente de habilitación para una futura subasta.</Text>;
 }
 
 function Field({ label, multiline, style, ...props }) {

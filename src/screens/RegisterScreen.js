@@ -57,7 +57,7 @@ export default function RegisterScreen({ onBack, onRegistered }) {
     if (!permission.granted) {
       setErrorDialog(
         source === 'camera'
-          ? 'Necesitamos permiso para abrir la camara.'
+          ? 'Necesitamos permiso para abrir la cámara.'
           : 'Necesitamos permiso para seleccionar la foto del documento.'
       );
       return;
@@ -188,7 +188,7 @@ function PersonalStep({ form, pickDocument, updateField }) {
       <View style={styles.verifiedBox}>
         <MaterialCommunityIcons color={colors.primaryContainer} name="email-fast-outline" size={26} />
         <Text style={styles.verifiedText}>
-          Primero vas a recibir la bienvenida de EliteBid con la validacion inicial. Despues llega otro mail con el codigo para confirmar que el correo te pertenece.
+          Primero vas a recibir la bienvenida de EliteBid con la validación inicial. Después llega otro mail con el código para confirmar que el correo te pertenece.
         </Text>
       </View>
 
@@ -243,7 +243,7 @@ function PersonalStep({ form, pickDocument, updateField }) {
           <Text style={styles.groupCopy}>
             {form.documentType === 'dni'
               ? 'Sube una foto clara del frente y dorso.'
-              : 'Sube una foto clara de la pagina principal del pasaporte.'}
+              : 'Subí una foto clara de la página principal del pasaporte.'}
           </Text>
         </View>
         <View style={styles.documentRow}>

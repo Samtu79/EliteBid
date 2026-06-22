@@ -6,8 +6,8 @@ require('dotenv').config();
 
 const defaultCompanyEmail = 'verificacion@elitebid.com';
 const defaultFrom = `EliteBid <${defaultCompanyEmail}>`;
-const defaultSubject = 'Tu codigo de verificacion EliteBid';
-const defaultPasswordResetSubject = 'Tu codigo para recuperar la clave EliteBid';
+const defaultSubject = 'Tu código de verificación EliteBid';
+const defaultPasswordResetSubject = 'Tu código para recuperar la clave EliteBid';
 const defaultAccountStatusSubject = 'Validacion de cuenta EliteBid';
 
 function buildVerificationUrl(token) {
@@ -153,18 +153,18 @@ function buildVerificationContent({ name, code }) {
   return {
     html: `
       <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-        <h1 style="font-size: 22px;">Codigo de verificacion EliteBid</h1>
-        <p>Hola ${firstName}, este codigo confirma que el email te pertenece.</p>
-        <p>Usalo en EliteBid para verificar tu correo y crear tu contrasena definitiva.</p>
+        <h1 style="font-size: 22px;">Código de verificación EliteBid</h1>
+        <p>Hola ${firstName}, este código confirma que el email te pertenece.</p>
+        <p>Usalo en EliteBid para verificar tu correo y crear tu contraseña definitiva.</p>
         <p style="font-size: 30px; font-weight: 800; letter-spacing: 6px; margin: 24px 0;">${safeCode}</p>
-        <p>El codigo vence en 15 minutos. Si no lo pediste, podes ignorar este mensaje.</p>
+        <p>El código vence en 15 minutos. Si no lo pediste, podés ignorar este mensaje.</p>
       </div>
     `,
     text: [
-      `Hola ${name || ''}, este codigo confirma que el email te pertenece.`,
-      'Usalo en EliteBid para verificar tu correo y crear tu contrasena definitiva.',
-      `Codigo: ${code}`,
-      'El codigo vence en 15 minutos.'
+      `Hola ${name || ''}, este código confirma que el email te pertenece.`,
+      'Usalo en EliteBid para verificar tu correo y crear tu contraseña definitiva.',
+      `Código: ${code}`,
+      'El código vence en 15 minutos.'
     ].join('\n\n')
   };
 }
@@ -173,10 +173,10 @@ function buildAccountReviewContent({ accepted, name }) {
   const firstName = escapeHtml(name || 'tu cuenta');
   const title = accepted ? 'Bienvenido a EliteBid' : 'Cuenta no aceptada por EliteBid';
   const message = accepted
-    ? 'Hemos validado tu usuario y tus datos iniciales. En unos segundos vas a recibir otro mail con el codigo para verificar tu correo y crear tu clave.'
+    ? 'Hemos validado tu usuario y tus datos iniciales. En unos segundos vas a recibir otro mail con el código para verificar tu correo y crear tu clave.'
     : 'La empresa no pudo aceptar tus datos iniciales. Si crees que es un error, comunicate con EliteBid.';
   const nextStep = accepted
-    ? 'Ese codigo confirma que el email te pertenece. Si no lo ves, revisa spam o solicita el reenvio desde la app.'
+    ? 'Ese código confirma que el email te pertenece. Si no lo ves, revisá spam o solicitá el reenvío desde la app.'
     : '';
 
   return {
@@ -204,18 +204,18 @@ function buildPasswordResetContent({ name, code }) {
   return {
     html: `
       <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-        <h1 style="font-size: 22px;">Recuperacion de clave EliteBid</h1>
-        <p>Hola ${firstName}, recibimos una solicitud para cambiar tu contrasena.</p>
-        <p>Usa este codigo en EliteBid para confirmar el cambio y crear una nueva clave.</p>
+        <h1 style="font-size: 22px;">Recuperación de clave EliteBid</h1>
+        <p>Hola ${firstName}, recibimos una solicitud para cambiar tu contraseña.</p>
+        <p>Usá este código en EliteBid para confirmar el cambio y crear una nueva clave.</p>
         <p style="font-size: 30px; font-weight: 800; letter-spacing: 6px; margin: 24px 0;">${safeCode}</p>
-        <p>El codigo vence en 15 minutos. Si no pediste este cambio, ignora este mensaje.</p>
+        <p>El código vence en 15 minutos. Si no pediste este cambio, ignorá este mensaje.</p>
       </div>
     `,
     text: [
-      `Hola ${name || ''}, recibimos una solicitud para cambiar tu contrasena en EliteBid.`,
-      'Usa este codigo para confirmar el cambio y crear una nueva clave.',
-      `Codigo: ${code}`,
-      'El codigo vence en 15 minutos. Si no pediste este cambio, ignora este mensaje.'
+      `Hola ${name || ''}, recibimos una solicitud para cambiar tu contraseña en EliteBid.`,
+      'Usá este código para confirmar el cambio y crear una nueva clave.',
+      `Código: ${code}`,
+      'El código vence en 15 minutos. Si no pediste este cambio, ignorá este mensaje.'
     ].join('\n\n')
   };
 }

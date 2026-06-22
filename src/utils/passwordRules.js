@@ -23,7 +23,7 @@ export function isPasswordReady(status) {
 export const passwordRuleCopy = [
   ['length', 'Entre 8 y 72 caracteres'],
   ['letter', 'Al menos una letra'],
-  ['number', 'Al menos un numero'],
-  ['symbol', 'Al menos un simbolo'],
+  ['number', 'Al menos un número'],
+  ['symbol', 'Al menos un símbolo'],
   ['noSpaces', 'Sin espacios']
 ];

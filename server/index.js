@@ -1868,7 +1868,8 @@ async function getAuctionCatalogLots(auctionId, viewer = null) {
       (SELECT GROUP_CONCAT(f.uri ORDER BY f.orden SEPARATOR '\n') FROM fotos f WHERE f.producto = p.identificador) AS photoUrls,
       i.identificador AS itemId, i.precio_base AS basePrice,
       CASE WHEN i.puja_actual > 0 THEN i.puja_actual ELSE i.precio_base END AS currentBid,
-      i.orden_lote AS lotPosition, i.comision AS commission, i.subastado AS sold, i.cierre_estado AS closureStatus,
+      i.orden_lote AS lotPosition, i.comision AS commission, i.subastado AS sold,
+      i.cierre_estado AS closureStatus, i.cierre_motivo AS closureReason,
       i.timer_inicio AS timerStartedAt, i.timer_vencimiento AS timerExpiresAt
      FROM subastas s
      JOIN catalogos c ON c.subasta = s.identificador
@@ -1885,9 +1886,9 @@ async function getAuctionCatalogLots(auctionId, viewer = null) {
 
 async function enterAuctionRoom(clienteId, auctionId) {
   const detail = await getAuctionDetail(auctionId, clienteId);
-  if (detail.status !== 'abierta') throw new Error('La sala todavia no esta abierta.');
+  if (detail.status !== 'abierta') throw new Error('La sala todavía no está abierta.');
   await assertNoActivePenalties(clienteId);
-  if (!detail.eligibility.categoryOk) throw new Error('Tu categoria no permite participar en esta subasta.');
+  if (!detail.eligibility.categoryOk) throw new Error('Tu categoría no permite participar en esta subasta.');
   if (detail.eligibility.verifiedPayments < 1) {
     throw new Error(`Necesitas registrar un medio de pago verificado en ${detail.currency || 'ARS'} para pujar.`);
   }
@@ -1985,7 +1986,7 @@ async function resolveBidPayment(clienteId, paymentMethodId, amount, currency = 
   }
 
   if (payment.currency !== currency) {
-    throw new Error(`Esta subasta es en ${currency}. Selecciona un medio de pago verificado en ${currency}.`);
+    throw new Error(`Esta subasta es en ${currency}. Seleccioná un medio de pago verificado en ${currency}.`);
   }
 
   const guaranteeAmount = Number(payment.guaranteeAmount || 0);
@@ -2001,7 +2002,7 @@ async function resolveBidPayment(clienteId, paymentMethodId, amount, currency = 
     );
     const nextTotal = Number(used?.total || 0) + Number(amount || 0);
     if (nextTotal > guaranteeAmount) {
-      throw new Error(`La puja supera la garantia disponible de ${formatMoney(guaranteeAmount)} para ese medio de pago.`);
+      throw new Error(`La puja supera la garantía disponible de ${formatMoney(guaranteeAmount)} para ese medio de pago.`);
     }
   }
 
@@ -2187,7 +2188,9 @@ async function finalizeAuctionItem(itemId) {
   const paidAutomatically = lastBid
     ? await captureWinningPayment(buyerClientId, paymentMethodId, totalDue, item.currency)
     : false;
-  const paymentStatus = paidAutomatically ? 'pagada' : 'pendiente';
+  const paymentStatus = lastBid
+    ? (paidAutomatically ? 'pagada' : 'pendiente')
+    : 'pagada';
 
   if (lastBid) {
     await run('UPDATE pujos SET ganador = ? WHERE item = ?', ['no', itemId]);
@@ -2256,14 +2259,14 @@ async function placeAuctionBid(clienteId, auctionId, amount, paymentMethodId = n
 
   const detail = await enterAuctionRoom(clienteId, auctionId);
   if (detail.closureStatus === 'finalizada' || detail.status === 'cerrada') {
-    throw new Error('Esta subasta ya finalizo.');
+    throw new Error('Esta subasta ya finalizó.');
   }
   const closingExpired = ['esperando_puja', 'en_cuenta'].includes(detail.closureStatus) &&
     detail.timerExpiresAt &&
     Number(detail.closure?.secondsRemaining ?? detail.timerSecondsRemaining ?? 0) <= 0;
   if (closingExpired) {
     await finalizeAuctionItem(detail.itemId);
-    throw new Error('El contador llego a 00:00 y la pieza se esta adjudicando. Espera el siguiente producto del lote.');
+    throw new Error('El contador llegó a 00:00 y la pieza se está adjudicando. Esperá el siguiente producto del lote.');
   }
   const activeLeadingBid = await getActiveLeadingBid(clienteId);
   if (activeLeadingBid) {

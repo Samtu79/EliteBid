@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -38,7 +38,7 @@ export default function ResetPasswordScreen({ onBack }) {
     setMessage('');
 
     if (!email.trim()) {
-      setErrorDialog('Ingresa el correo de tu cuenta para recibir el codigo.');
+      setErrorDialog('Ingresá el correo de tu cuenta para recibir el código.');
       return;
     }
 
@@ -49,8 +49,8 @@ export default function ResetPasswordScreen({ onBack }) {
       setStep('confirm');
       setMessage(
         result.resetEmailSent
-          ? 'Te enviamos un codigo de recuperacion. Revisalo e ingresalo aca.'
-          : 'Generamos el codigo, pero no pudimos enviar el mail. Revisa SMTP o intenta reenviar.'
+          ? 'Te enviamos un código de recuperación. Revisalo e ingresalo acá.'
+          : 'Generamos el código, pero no pudimos enviar el mail. Revisá SMTP o intentá reenviar.'
       );
     } catch (resetError) {
       setErrorDialog(resetError.message);
@@ -64,23 +64,23 @@ export default function ResetPasswordScreen({ onBack }) {
     setMessage('');
 
     if (!email.trim()) {
-      setErrorDialog('Ingresa el correo de tu cuenta.');
+      setErrorDialog('Ingresá el correo de tu cuenta.');
       return;
     }
     if (code.trim().length !== 6) {
-      setErrorDialog('Ingresa el codigo de 6 digitos que recibiste por mail.');
+      setErrorDialog('Ingresá el código de 6 dígitos que recibiste por mail.');
       return;
     }
     if (!password.trim()) {
-      setErrorDialog('Ingresa una nueva contrasena.');
+      setErrorDialog('Ingresá una nueva contraseña.');
       return;
     }
     if (!confirmPassword.trim()) {
-      setErrorDialog('Confirma tu nueva contrasena.');
+      setErrorDialog('Confirmá tu nueva contraseña.');
       return;
     }
     if (!isPasswordReady(passwordStatus)) {
-      setErrorDialog('Revisa los requisitos de la contrasena antes de actualizarla.');
+      setErrorDialog('Revisá los requisitos de la contraseña antes de actualizarla.');
       return;
     }
 
@@ -88,7 +88,7 @@ export default function ResetPasswordScreen({ onBack }) {
 
     try {
       await confirmPasswordReset(email, code, password, confirmPassword);
-      setMessage('Clave actualizada. Ya podes iniciar sesion con tu nueva clave.');
+      setMessage('Clave actualizada. Ya podés iniciar sesión con tu nueva clave.');
       setCode('');
       setPassword('');
       setConfirmPassword('');
@@ -128,7 +128,7 @@ export default function ResetPasswordScreen({ onBack }) {
         </View>
         <Text style={styles.title}>Crear nueva clave</Text>
         <Text style={styles.subtitle}>
-          Primero te enviamos un codigo a tu correo. Despues lo ingresas aca para cambiar la clave.
+          Primero te enviamos un código a tu correo. Después lo ingresás acá para cambiar la clave.
         </Text>
 
         <Field
@@ -145,19 +145,19 @@ export default function ResetPasswordScreen({ onBack }) {
           <>
             <Field
               keyboardType="numeric"
-              label="Codigo recibido"
+              label="Código recibido"
               maxLength={6}
               onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="6 digitos"
+              placeholder="6 dígitos"
               value={code}
             />
             <Field
-              label="Nueva contrasena"
+              label="Nueva contraseña"
               onChangeText={setPassword}
-              placeholder="Ingresa tu nueva clave"
+              placeholder="Ingresá tu nueva clave"
               rightAccessory={(
                 <Pressable
-                  accessibilityLabel={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                  accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   onPress={() => setShowPassword((current) => !current)}
                   style={styles.eyeButton}
                 >
@@ -172,12 +172,12 @@ export default function ResetPasswordScreen({ onBack }) {
               value={password}
             />
             <Field
-              label="Confirmar contrasena"
+              label="Confirmar contraseña"
               onChangeText={setConfirmPassword}
               placeholder="Repite tu nueva clave"
               rightAccessory={(
                 <Pressable
-                  accessibilityLabel={showConfirmPassword ? 'Ocultar confirmacion' : 'Mostrar confirmacion'}
+                  accessibilityLabel={showConfirmPassword ? 'Ocultar confirmación' : 'Mostrar confirmación'}
                   onPress={() => setShowConfirmPassword((current) => !current)}
                   style={styles.eyeButton}
                 >
@@ -236,7 +236,7 @@ export default function ResetPasswordScreen({ onBack }) {
             {loading ? (
               <ActivityIndicator color={colors.onPrimaryFixed} />
             ) : (
-              <Text style={styles.primaryButtonText}>{step === 'request' ? 'Enviar codigo' : 'Actualizar clave'}</Text>
+              <Text style={styles.primaryButtonText}>{step === 'request' ? 'Enviar código' : 'Actualizar clave'}</Text>
             )}
           </LinearGradient>
         </Pressable>
@@ -244,7 +244,7 @@ export default function ResetPasswordScreen({ onBack }) {
         {step === 'confirm' ? (
           <Pressable disabled={loading} onPress={requestCode} style={styles.secondaryButton}>
             <MaterialCommunityIcons color={colors.primary} name="email-sync-outline" size={18} />
-            <Text style={styles.secondaryButtonText}>Reenviar codigo</Text>
+            <Text style={styles.secondaryButtonText}>Reenviar código</Text>
           </Pressable>
         ) : null}
       </ScrollView>

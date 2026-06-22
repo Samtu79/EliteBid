@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+﻿const mysql = require('mysql2/promise');
 
 require('dotenv').config();
 
@@ -55,7 +55,7 @@ async function expectReject(label, fn, expectedText = '') {
   try {
     await fn();
   } catch (error) {
-    if (expectedText && !String(error.message).toLowerCase().includes(expectedText.toLowerCase())) {
+    if (expectedText && !normalizeForAssert(error.message).includes(normalizeForAssert(expectedText))) {
       throw new Error(`${label}: rechazo inesperado "${error.message}"`);
     }
     logOk(label);
@@ -63,6 +63,13 @@ async function expectReject(label, fn, expectedText = '') {
   }
 
   throw new Error(`${label}: se esperaba rechazo`);
+}
+
+function normalizeForAssert(value = '') {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 async function createDb() {
@@ -1359,7 +1366,7 @@ async function main() {
     await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [commonAuctionSeed.auctionId]);
 
     const auctions = await request(`/auctions?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
-    const activeCommon = auctions.find((auction) => Number(auction.id) === Number(commonAuctionSeed.auctionId));
+    let activeCommon = auctions.find((auction) => Number(auction.id) === Number(commonAuctionSeed.auctionId));
     if (!activeCommon) throw new Error('No hay subasta comun abierta para QA');
     if (Number(activeCommon.currentBid) !== Number(activeCommon.basePrice)) {
       throw new Error('La subasta sin pujas debe mostrar el precio base como puja actual');
@@ -1375,6 +1382,45 @@ async function main() {
       throw new Error('El catalogo no devolvio las fotos esperadas por producto');
     }
     logOk('catalogo subasta-productos con precios y fotos');
+
+    await db.query(
+      `UPDATE items_catalogo
+       SET puja_actual = 0, subastado = 'no', timer_inicio = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 3 MINUTE),
+         timer_vencimiento = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 SECOND), cierre_estado = 'esperando_puja',
+         cierre_motivo = NULL
+       WHERE identificador = ?`,
+      [registeredDetail.itemId]
+    );
+    const companyClosedDetail = await request(`/auctions/${activeCommon.id}`, { token: userA.sessionToken });
+    const companyBoughtItem = companyClosedDetail.catalog.find((item) => Number(item.itemId) === Number(registeredDetail.itemId));
+    if (!companyBoughtItem || companyBoughtItem.closureStatus !== 'finalizada' || companyBoughtItem.closureReason !== 'compra_empresa_sin_pujas') {
+      throw new Error('El producto sin pujas no quedo cerrado como compra de empresa');
+    }
+    const [companyReceiptRows] = await db.query(
+      `SELECT r.cliente AS clienteId, r.importe AS amount, r.estado_pago AS paymentStatus
+       FROM registro_de_subasta r
+       JOIN catalogos c ON c.subasta = r.subasta
+       JOIN items_catalogo i ON i.catalogo = c.identificador AND i.producto = r.producto
+       WHERE i.identificador = ?
+       LIMIT 1`,
+      [registeredDetail.itemId]
+    );
+    const companyReceipt = companyReceiptRows[0];
+    if (
+      !companyReceipt ||
+      Number(companyReceipt.clienteId) !== 4 ||
+      Number(companyReceipt.amount) !== Number(registeredDetail.basePrice) ||
+      companyReceipt.paymentStatus !== 'pagada'
+    ) {
+      throw new Error('La empresa no compro el producto sin pujas por el valor base');
+    }
+    logOk('producto sin pujas lo compra la empresa al valor base');
+
+    await resetAuctionForQa(db, commonAuctionSeed.auctionId);
+    await db.query("UPDATE subastas SET estado = 'abierta' WHERE identificador = ?", [commonAuctionSeed.auctionId]);
+    const auctionsAfterCompanyPurchase = await request(`/auctions?clienteId=${userA.clienteId}`, { token: userA.sessionToken });
+    activeCommon = auctionsAfterCompanyPurchase.find((auction) => Number(auction.id) === Number(commonAuctionSeed.auctionId));
+    if (!activeCommon) throw new Error('No se pudo restaurar la subasta comun para continuar QA');
 
     await expectReject('entrar a sala sin sesion bloqueado', () =>
       request(`/auctions/${activeCommon.id}/enter`, {

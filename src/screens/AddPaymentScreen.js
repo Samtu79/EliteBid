@@ -177,7 +177,7 @@ export default function AddPaymentScreen({ onBack, onSaved, user }) {
           <View style={styles.currencyNotice}>
             <MaterialCommunityIcons color={colors.primary} name="cash-multiple" size={19} />
             <Text style={styles.currencyNoticeText}>
-              Cada subasta define su moneda. Para subastas en dolares usa cuenta o tarjeta habilitada en USD.
+              Cada subasta define su moneda. Para subastas en dólares usá cuenta o tarjeta habilitada en USD.
             </Text>
           </View>
         </View>
@@ -249,7 +249,7 @@ function CardForm({ form, updateField }) {
             size={17}
           />
           <Text style={[styles.cardValidationText, !cardNumberValid && styles.cardValidationTextError]}>
-            {cardNumberValid ? 'Numero de tarjeta valido.' : 'Revisa el numero de tarjeta.'}
+            {cardNumberValid ? 'Número de tarjeta válido.' : 'Revisá el número de tarjeta.'}
           </Text>
         </View>
       ) : null}
@@ -319,7 +319,7 @@ function BankForm({ form, updateField }) {
       />
       <InlineValidation
         ok={cbuDigits.length === 22}
-        text={cbuDigits.length === 22 ? 'CBU/CVU completo.' : `${cbuDigits.length}/22 digitos`}
+        text={cbuDigits.length === 22 ? 'CBU/CVU completo.' : `${cbuDigits.length}/22 dígitos`}
       />
       <Field
         autoCapitalize="characters"
@@ -374,7 +374,7 @@ function CheckForm({ form, pickCheckImage, updateField }) {
       {dateComplete ? (
         <InlineValidation
           ok={isValidSlashDate(form.issueDate) && !isFutureSlashDate(form.issueDate)}
-          text={!isValidSlashDate(form.issueDate) ? 'La fecha ingresada no existe.' : isFutureSlashDate(form.issueDate) ? 'La fecha no puede ser futura.' : 'Fecha de emision valida.'}
+          text={!isValidSlashDate(form.issueDate) ? 'La fecha ingresada no existe.' : isFutureSlashDate(form.issueDate) ? 'La fecha no puede ser futura.' : 'Fecha de emisión válida.'}
         />
       ) : null}
       <Pressable onPress={pickCheckImage} style={styles.uploadBox}>
@@ -431,14 +431,14 @@ function validatePaymentForm(form) {
   }
 
   if (form.type === 'tarjeta') {
-    if (!isValidCardNumber(form.cardNumber)) return 'Ingresa un numero de tarjeta valido.';
+    if (!isValidCardNumber(form.cardNumber)) return 'Ingresá un número de tarjeta válido.';
   }
 
   if (form.type === 'cheque') {
     const checkNumberLength = onlyDigits(form.checkNumber).length;
     if (!isValidBankName(form.bank)) return 'Ingresa el banco emisor. Ejemplo: Banco Nacion.';
     if (checkNumberLength < 4 || checkNumberLength > 20 || /^0+$/.test(onlyDigits(form.checkNumber))) {
-      return 'El numero de cheque debe tener entre 4 y 20 digitos.';
+      return 'El número de cheque debe tener entre 4 y 20 dígitos.';
     }
     if (!/^\d{2}\/\d{2}\/\d{4}$/.test(form.issueDate) || !isValidSlashDate(form.issueDate)) {
       return 'Ingresa la fecha del cheque con formato DD/MM/AAAA.';

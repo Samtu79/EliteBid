@@ -73,7 +73,7 @@ export default function NotificationsScreen({ onAction, onBack }) {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.summary}>
             <Text style={styles.summaryValue}>{notifications.filter((item) => !item.read).length}</Text>
-            <Text style={styles.summaryText}>notificaciones requieren atencion</Text>
+            <Text style={styles.summaryText}>notificaciones requieren atención</Text>
           </View>
 
           {notifications.length ? (
@@ -88,7 +88,7 @@ export default function NotificationsScreen({ onAction, onBack }) {
             <View style={styles.empty}>
               <MaterialCommunityIcons color={colors.primary} name="bell-check-outline" size={42} />
               <Text style={styles.emptyTitle}>Sin novedades</Text>
-              <Text style={styles.emptyText}>Cuando haya acciones pendientes o avisos de subasta van a aparecer aca.</Text>
+              <Text style={styles.emptyText}>Cuando haya acciones pendientes o avisos de subasta van a aparecer acá.</Text>
             </View>
           )}
         </ScrollView>

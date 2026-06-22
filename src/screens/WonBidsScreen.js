@@ -76,7 +76,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
   async function saveAddress(purchase) {
     const deliveryAddress = addresses[purchase.id]?.trim() || '';
     if (!deliveryAddress) {
-      setToast({ message: 'Ingresa una direccion de entrega.', tone: 'danger' });
+      setToast({ message: 'Ingresá una dirección de entrega.', tone: 'danger' });
       return;
     }
 
@@ -99,7 +99,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
       const rows = await settlePurchase(user.clienteId, purchase.id);
       setPurchases(rows);
       setAddresses(Object.fromEntries(rows.map((item) => [item.id, item.deliveryAddress || ''])));
-      setToast({ message: 'Pago confirmado. La compra quedo registrada.', tone: 'success' });
+      setToast({ message: 'Pago confirmado. La compra quedó registrada.', tone: 'success' });
     } catch (error) {
       setToast({ message: error.message, tone: 'danger' });
       try {
@@ -180,7 +180,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
             <View style={styles.emptyState}>
               <MaterialCommunityIcons color={colors.primary} name="gavel" size={42} />
               <Text style={styles.emptyTitle}>Sin productos ganados</Text>
-              <Text style={styles.emptyCopy}>Cuando ganes una pieza, va a aparecer aca con su pago y estado de entrega.</Text>
+              <Text style={styles.emptyCopy}>Cuando ganes una pieza, va a aparecer acá con su pago y estado de entrega.</Text>
             </View>
           ) : (
             <View style={styles.groups}>
@@ -239,7 +239,7 @@ export default function WonBidsScreen({ onBack, onNavigate, user }) {
                       editable={!hasSavedDelivery && savingId !== purchase.id}
                       multiline
                       onChangeText={(value) => updateAddress(purchase.id, value)}
-                      placeholder="Calle, numero, piso/depto, ciudad"
+                      placeholder="Calle, número, piso/depto, ciudad"
                       placeholderTextColor="rgba(201, 196, 211, 0.55)"
                       style={styles.input}
                       value={addresses[purchase.id] || ''}

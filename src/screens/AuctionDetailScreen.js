@@ -194,7 +194,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           <View style={styles.catalogCard}>
             <View style={styles.catalogHeader}>
               <MaterialCommunityIcons color={colors.primary} name="format-list-bulleted" size={19} />
-              <Text style={styles.catalogTitle}>Catalogo de productos</Text>
+              <Text style={styles.catalogTitle}>Catálogo de productos</Text>
             </View>
             {soldItems.length ? (
               <View style={[styles.catalogNotice, allItemsSold && styles.catalogNoticeClosed]}>
@@ -241,7 +241,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
           <View style={styles.infoGrid}>
             <InfoBlock label="Valor inicial" value={formatMoney(auction.basePrice)} />
             <InfoBlock
-              label={Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Sin ofertas aun'}
+              label={Number(auction.currentBid || 0) > 0 ? 'Puja actual' : 'Sin ofertas aún'}
               value={Number(auction.currentBid || 0) > 0 ? formatMoney(auction.currentBid) : '-'}
             />
             <InfoBlock label="Fecha de inicio" value={formatDate(auction.date)} />
@@ -252,14 +252,14 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
             {auction.currency === 'USD' ? (
               <RuleRow
                 ok={!publicGuest && auction.eligibility.verifiedPayments > 0}
-                text="Subasta en dolares: requiere medio de pago USD verificado."
+                text="Subasta en dólares: requiere medio de pago USD verificado."
               />
             ) : null}
             {guest ? (
               <RuleRow
                 ok={false}
                 text={publicGuest
-                  ? 'Invitado: podes ver catalogos publicos de subastas futuras. Registrate para ver precios y participar.'
+                  ? 'Invitado: podés ver catálogos públicos de subastas futuras. Registrate para ver precios y participar.'
                   : 'Cuenta invitada: verifica tu email para ver precios, editar datos y participar.'}
               />
             ) : null}
@@ -267,8 +267,8 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
               ok={auction.eligibility.categoryOk}
               text={
                 auction.eligibility.categoryOk
-                  ? `Categoria habilitada: ${categoryLabel[user.categoria] ?? user.categoria}`
-                  : 'Tu categoria no permite entrar a esta sala'
+                  ? `Categoría habilitada: ${categoryLabel[user.categoria] ?? user.categoria}`
+                  : 'Tu categoría no permite entrar a esta sala'
               }
             /> : null}
             {!publicGuest ? <RuleRow
@@ -276,7 +276,7 @@ export default function AuctionDetailScreen({ auctionId, onBack, onEnterRoom, on
               text={
                 auction.eligibility.verifiedPayments > 0
                   ? `${auction.eligibility.verifiedPayments} medio de pago verificado en ${auction.currency || 'ARS'}`
-                  : `Necesitas un medio de pago verificado en ${auction.currency || 'ARS'}`
+                  : `Necesitás un medio de pago verificado en ${auction.currency || 'ARS'}`
               }
             /> : null}
             {!guest ? <RuleRow
