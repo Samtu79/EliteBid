@@ -13,6 +13,7 @@ const app = express();
 const SESSION_DAYS = 7;
 const BID_TIMER_SECONDS = 60;
 const FIRST_BID_TIMER_SECONDS = 180;
+const AUCTION_CLOSING_GRACE_SECONDS = 5;
 const DEMO_LIVE_AUCTION_IDS = [11, 12, 13];
 const DEMO_FIRST_BID_TIMER_SECONDS = 180;
 const COMPANY_CLIENT_ID = 4;
@@ -2028,9 +2029,10 @@ async function settleExpiredAuctionTimers() {
      WHERE s.estado = 'abierta'
        AND i.cierre_estado IN ('esperando_puja', 'en_cuenta')
        AND i.timer_vencimiento IS NOT NULL
-       AND i.timer_vencimiento <= UTC_TIMESTAMP()
+       AND i.timer_vencimiento <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND)
      ORDER BY i.timer_vencimiento ASC
-     LIMIT 20`
+     LIMIT 20`,
+    [AUCTION_CLOSING_GRACE_SECONDS]
   );
 
   for (const row of rows) {

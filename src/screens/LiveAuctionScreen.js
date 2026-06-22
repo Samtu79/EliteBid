@@ -305,6 +305,7 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
   const finalized = auction.status === 'cerrada' || auction.closureStatus === 'finalizada';
   const counting = auction.closureStatus === 'en_cuenta' && !finalized;
   const waitingForFirstBid = auction.closureStatus === 'esperando_puja' && !finalized && secondsRemaining > 0;
+  const technicalClosing = !finalized && secondsRemaining === 0 && (counting || auction.closureStatus === 'esperando_puja');
   const bidDisabled = sending || finalized || !selectedPaymentId || leadingActive;
   const lockedPaymentMethodId = auction.lockedPaymentMethodId ? Number(auction.lockedPaymentMethodId) : null;
 
@@ -366,6 +367,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               <Text style={styles.timerLabel}>
                 {finalized
                   ? 'Lote finalizado'
+                  : technicalClosing
+                    ? 'Cierre tecnico: procesando ofertas'
                   : counting
                     ? 'Cierra si nadie mejora en'
                     : waitingForFirstBid
@@ -375,6 +378,8 @@ export default function LiveAuctionScreen({ auctionId, onBack, onNavigate, onOpe
               <Text style={[styles.timerValue, finalized && styles.timerValueClosed]}>
                 {finalized
                   ? getClosureCopy(auction)
+                  : technicalClosing
+                    ? '00:00'
                   : counting || waitingForFirstBid
                     ? formatCountdown(secondsRemaining)
                     : 'Preparando sala'}

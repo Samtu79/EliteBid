@@ -1,4 +1,4 @@
-const listeners = new Set();
+import NetInfo from '@react-native-community/netinfo';
 
 export function getInitialNetworkStatus() {
   if (typeof navigator === 'undefined' || typeof navigator.onLine !== 'boolean') {
@@ -13,21 +13,14 @@ export function hasNetworkConnection() {
 }
 
 export function subscribeNetworkStatus(callback) {
-  if (typeof window === 'undefined' || !window.addEventListener) {
-    return () => {};
-  }
+  return subscribeConnectionStatus(({ online }) => callback(online));
+}
 
-  const notify = () => {
-    const online = getInitialNetworkStatus();
-    listeners.forEach((listener) => listener(online));
-  };
-  listeners.add(callback);
-  window.addEventListener('online', notify);
-  window.addEventListener('offline', notify);
+export function subscribeConnectionStatus(callback) {
+  return NetInfo.addEventListener((state) => {
+    const online = state.isConnected !== false && state.isInternetReachable !== false;
+    const type = state.type === 'wifi' || state.type === 'cellular' ? state.type : 'unknown';
 
-  return () => {
-    listeners.delete(callback);
-    window.removeEventListener('online', notify);
-    window.removeEventListener('offline', notify);
-  };
+    callback({ online, type });
+  });
 }

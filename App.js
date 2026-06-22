@@ -3,7 +3,7 @@ import { Animated, Easing, Image, Platform, StatusBar, StyleSheet, Text, View } 
 
 import { initDatabase } from './src/backend/database';
 import { getActiveSession, signOut } from './src/backend/authService';
-import { getInitialNetworkStatus, subscribeNetworkStatus } from './src/backend/networkStatus';
+import { getInitialNetworkStatus, subscribeConnectionStatus } from './src/backend/networkStatus';
 import { notifyOfflineConnection } from './src/backend/offlineNotificationService';
 import ConfirmDialog from './src/components/ConfirmDialog';
 import AddPaymentScreen from './src/screens/AddPaymentScreen';
@@ -51,7 +51,9 @@ export default function App() {
   const [guestAccessDialogVisible, setGuestAccessDialogVisible] = useState(false);
   const [guestAccessTarget, setGuestAccessTarget] = useState('esta seccion');
   const [online, setOnline] = useState(getInitialNetworkStatus);
+  const [connectionDialogVisible, setConnectionDialogVisible] = useState(false);
   const previousOnlineRef = useRef(true);
+  const previousNetworkTypeRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -87,14 +89,23 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => subscribeNetworkStatus(setOnline), []);
-
   useEffect(() => {
-    if (previousOnlineRef.current && !online) {
-      notifyOfflineConnection().catch(() => {});
-    }
-    previousOnlineRef.current = online;
-  }, [online]);
+    return subscribeConnectionStatus(({ online: nextOnline, type }) => {
+      setOnline(nextOnline);
+
+      if (previousOnlineRef.current && !nextOnline) {
+        notifyOfflineConnection().catch(() => {});
+      }
+      previousOnlineRef.current = nextOnline;
+
+      if (previousNetworkTypeRef.current === 'wifi' && type === 'cellular') {
+        setConnectionDialogVisible(true);
+      }
+      if (type !== 'unknown') {
+        previousNetworkTypeRef.current = type;
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!booting) {
@@ -437,6 +448,16 @@ export default function App() {
         onSecondary={loginFromGuest}
         title="Seguis como invitado"
         visible={guestAccessDialogVisible}
+      />
+      <ConfirmDialog
+        confirmLabel="Entendido"
+        icon="cellphone-wireless"
+        message="Se perdio la conexion WiFi y ahora estas usando datos moviles. Las pujas seguiran funcionando mientras mantengas conexion."
+        onCancel={() => setConnectionDialogVisible(false)}
+        onConfirm={() => setConnectionDialogVisible(false)}
+        showSecondary={false}
+        title="Cambiaste a datos moviles"
+        visible={connectionDialogVisible}
       />
     </>
   );

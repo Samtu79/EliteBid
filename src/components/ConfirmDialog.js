@@ -13,6 +13,7 @@ export default function ConfirmDialog({
   onCancel,
   onConfirm,
   onSecondary,
+  showSecondary = true,
   title,
   visible
 }) {
@@ -31,17 +32,19 @@ export default function ConfirmDialog({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
           <View style={styles.actions}>
-            <Pressable
-              disabled={loading}
-              onPress={onSecondary || onCancel}
-              style={[styles.secondaryButton, loading && styles.disabledButton]}
-            >
-              <Text style={styles.secondaryText}>{cancelLabel}</Text>
-            </Pressable>
+            {showSecondary ? (
+              <Pressable
+                disabled={loading}
+                onPress={onSecondary || onCancel}
+                style={[styles.secondaryButton, loading && styles.disabledButton]}
+              >
+                <Text style={styles.secondaryText}>{cancelLabel}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               disabled={loading}
               onPress={onConfirm}
-              style={[styles.primaryButton, loading && styles.disabledButton]}
+              style={[styles.primaryButton, !showSecondary && styles.primaryButtonFull, loading && styles.disabledButton]}
             >
               {loading ? (
                 <ActivityIndicator color={colors.onPrimaryFixed} />
@@ -109,6 +112,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 46,
     justifyContent: 'center'
+  },
+  primaryButtonFull: {
+    flex: 0,
+    width: '100%'
   },
   primaryText: {
     color: colors.onPrimaryFixed,
